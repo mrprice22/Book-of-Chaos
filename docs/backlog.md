@@ -23,7 +23,7 @@ This file is the autopilot's task queue and its memory between sessions. It is t
 The host is Bazzite (immutable OS) with no Rust, Node, or SpacetimeDB. All builds run
 inside a `distrobox` container so the host stays clean.
 
-- [ ] **M0.1** Write `Containerfile` defining the dev image (Fedora base + build deps)
+- [x] **M0.1** Write `Containerfile` defining the dev image (Fedora base + build deps)
 - [ ] **M0.2** `./scripts/dev.sh setup` creates the `boc-dev` container and installs rustup, Node LTS, and the SpacetimeDB CLI, and is idempotent on re-run
 - [ ] **M0.3** `./scripts/dev.sh run <cmd>` executes a command inside the container and forwards the exit code
 - [ ] **M0.4** `./scripts/verify.sh` runs green against the empty repo (every stage SKIPs cleanly)
