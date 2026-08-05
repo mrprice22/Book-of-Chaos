@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: "true"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # CI installs the toolchain with the same script the dev container uses, so a
+      # green CI run and a green local run mean the same thing. Divergence between
+      # the two is the classic way a verify gate stops being trustworthy.
+      - name: Cache toolchain
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo
+            ~/.rustup
+            ~/.nvm
+            ~/.local/bin
+            ~/.boc-env
+          key: toolchain-${{ runner.os }}-${{ hashFiles('scripts/install-toolchain.sh', 'scripts/dev.sh') }}
+
+      - name: Install toolchain
+        run: bash scripts/install-toolchain.sh
+
+      - name: Cache build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            server/target
+            client/node_modules
+          key: build-${{ runner.os }}-${{ hashFiles('server/Cargo.lock', 'client/package-lock.json') }}
+          restore-keys: build-${{ runner.os }}-
+
+      - name: Install client dependencies
+        if: hashFiles('client/package-lock.json') != ''
+        run: bash -c '. "$HOME/.boc-env"; cd client && npm ci'
+
+      - name: Verify
+        run: ./scripts/verify.sh
+
+  scope-guard:
+    # The MVP's main failure mode is not bugs, it is scope creep. This makes an
+    # unreviewed scope change visible in the PR rather than discovered at release.
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Flag changes to the scope contract
+        run: |
+          if git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -q '^docs/mvp-scope.md$'; then
+            echo "::warning::docs/mvp-scope.md changed — confirm the MVP boundary moved deliberately."
+          fi

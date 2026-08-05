@@ -1,0 +1,35 @@
+# Dev container home — toolchains, caches, shell state
+.devhome/
+
+# Rust
+target/
+**/*.rs.bk
+
+# Node
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+
+# Playwright
+playwright-report/
+test-results/
+
+# SpacetimeDB local state and identity material
+.spacetime/
+*.identity
+*.token
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Editors / OS
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Claude Code personal overrides (project settings.json IS committed)
+.claude/settings.local.json

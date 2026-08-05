@@ -254,9 +254,28 @@ Built on [SpacetimeDB](https://spacetimedb.com) for real-time state sync across 
 
 ---
 
+## 🛠️ Building
+
+The host needs only `podman` and `distrobox` — all toolchains live in a dev container.
+
+```bash
+./scripts/dev.sh setup      # build image, create container, install Rust + Node + SpacetimeDB
+./scripts/verify.sh         # the quality gate — the only verdict that counts
+./scripts/dev.sh doctor     # toolchain versions
+```
+
+Work is driven by [docs/backlog.md](./docs/backlog.md), scoped by
+[docs/mvp-scope.md](./docs/mvp-scope.md), and escalated through
+[docs/blocked.md](./docs/blocked.md). Conventions live in [CLAUDE.md](./CLAUDE.md).
+
+Running `/autopilot` in Claude Code works the backlog top to bottom: implement, test,
+verify, commit, repeat — stopping only when genuinely blocked.
+
+---
+
 ## 📋 Project Status
 
-> **Pre-Alpha** — Feature design phase. No implementation has begun.
+> **Pre-Alpha** — v0.1 MVP scoped ([docs/mvp-scope.md](./docs/mvp-scope.md)); implementation begins at milestone M0.
 
 ---
 

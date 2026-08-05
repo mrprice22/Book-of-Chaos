@@ -1,0 +1,138 @@
+# v0.1 Backlog — Autopilot Work Queue
+
+This file is the autopilot's task queue and its memory between sessions. It is the
+**single source of truth for what to do next**.
+
+## Rules
+
+- Work tasks **strictly top to bottom**. Do not skip ahead.
+- Exactly one task may be `[~]` (in progress) at a time.
+- A task is only `[x]` when its acceptance criteria are met **and** `./scripts/verify.sh` exits 0.
+- Check the box in the same commit as the work.
+- Do not add features that are not in [mvp-scope.md](./mvp-scope.md). If a task seems to
+  require one, that is a signal to stop and write to [blocked.md](./blocked.md).
+
+## Legend
+
+`[ ]` todo · `[~]` in progress · `[x]` done · `[!]` blocked (see `blocked.md`)
+
+---
+
+## M0 — Toolchain bootstrap
+
+The host is Bazzite (immutable OS) with no Rust, Node, or SpacetimeDB. All builds run
+inside a `distrobox` container so the host stays clean.
+
+- [ ] **M0.1** Write `Containerfile` defining the dev image (Fedora base + build deps)
+- [ ] **M0.2** `./scripts/dev.sh setup` creates the `boc-dev` container and installs rustup, Node LTS, and the SpacetimeDB CLI, and is idempotent on re-run
+- [ ] **M0.3** `./scripts/dev.sh run <cmd>` executes a command inside the container and forwards the exit code
+- [ ] **M0.4** `./scripts/verify.sh` runs green against the empty repo (every stage SKIPs cleanly)
+
+**Acceptance:** on a machine with only `podman` + `distrobox`, a clean clone reaches a
+working `cargo --version`, `node --version`, and `spacetime --version` via one command.
+
+---
+
+## M1 — Server module skeleton
+
+- [ ] **M1.1** `server/` SpacetimeDB Rust module: `Cargo.toml`, `src/lib.rs`, compiles to wasm32
+- [ ] **M1.2** Tables `users`, `books`, `chapters`, `knowledge_blocks`, `chapter_deps`, `reader_progress` with the v0.1 column set (include nullable `locale`)
+- [ ] **M1.3** `spacetime publish` to a local standalone instance succeeds
+- [ ] **M1.4** `verify.sh` gains: `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test`
+
+**Acceptance:** module publishes locally and `verify.sh` enforces Rust quality gates.
+
+---
+
+## M2 — Domain reducers
+
+- [ ] **M2.1** `claim_username` — unique, immutable, rejects re-claim and duplicates
+- [ ] **M2.2** `create_book` / `update_book` / `publish_book` — caller becomes Owner; non-owners rejected
+- [ ] **M2.3** `create_chapter` / `update_chapter` / `reorder_chapters`
+- [ ] **M2.4** `create_block` / `update_block` / `delete_block` — HTML body sanitized server-side
+- [ ] **M2.5** `set_chapter_deps` — rejects self-reference, missing chapters, and cycles
+- [ ] **M2.6** Unit tests for every rejection path above
+
+**Acceptance:** every reducer has at least one happy-path and one rejection test. Authorization
+is tested, not assumed.
+
+---
+
+## M3 — Unlock engine
+
+The core of the product. Keep it a pure function over a graph snapshot so it is trivially
+testable, then call it from reducers.
+
+- [ ] **M3.1** `unlock::chapter_state(graph, progress, chapter_id) -> ChapterState`
+- [ ] **M3.2** `unlock::detect_cycle(graph) -> Option<Vec<ChapterId>>`
+- [ ] **M3.3** `complete_block` reducer — idempotent, writes `reader_progress`, recomputes affected chapter states
+- [ ] **M3.4** Table-driven tests: linear chain, diamond, disconnected islands, optional chapters, pinned chapters, self-cycle, 3-node cycle, empty graph
+
+**Acceptance:** unlock logic has no SpacetimeDB dependency in its signature and is covered
+by table-driven tests including every degenerate graph shape listed above.
+
+---
+
+## M4 — Client scaffold
+
+- [ ] **M4.1** `client/` Vite + React + TypeScript, strict mode on
+- [ ] **M4.2** SpacetimeDB TS SDK wired; `spacetime generate` bindings committed under `client/src/module_bindings/`
+- [ ] **M4.3** Connect on load, persist identity token in localStorage, reconnect cleanly
+- [ ] **M4.4** `i18n/en-US.ts` + `t()` helper; ESLint rule or test forbidding bare string literals in JSX
+- [ ] **M4.5** `verify.sh` gains: `tsc --noEmit`, `eslint`, `vitest run`, `vite build`
+
+**Acceptance:** client builds, connects to the local module, and shows the connected identity.
+
+---
+
+## M5 — Reader experience
+
+- [ ] **M5.1** Book landing page: title, description, chapter count, estimated read time
+- [ ] **M5.2** Chapter view: ordered blocks, sanitized HTML render, "Mark as complete"
+- [ ] **M5.3** Live subscription — completing a block updates state without a reload
+- [ ] **M5.4** Blocked chapters are visibly locked and unreachable by direct URL
+
+**Acceptance:** two browser tabs on the same identity stay in sync with no reload.
+
+---
+
+## M6 — Knowledge map
+
+- [ ] **M6.1** Build Mermaid graph source from the chapter dependency graph
+- [ ] **M6.2** Render with the four v0.1 node states plus optional/pinned badges
+- [ ] **M6.3** Clickable nodes navigate to the chapter
+- [ ] **M6.4** Re-render on subscription update (node state changes live)
+
+**Acceptance:** map is the primary navigation surface and reflects progress in real time.
+
+---
+
+## M7 — Author experience
+
+- [ ] **M7.1** Create book / chapter / block forms
+- [ ] **M7.2** Chapter prerequisite multi-select; cycle rejection surfaced as a readable error
+- [ ] **M7.3** Publish toggle (`Draft` → `Published`)
+- [ ] **M7.4** Author-only routes hidden and server-side rejected for non-owners
+
+**Acceptance:** the demo book can be built end to end through the UI, with no SQL and no CLI.
+
+---
+
+## M8 — Deploy & test
+
+- [ ] **M8.1** `scripts/seed.ts` — demo book, 5+ chapters, branching graph (diamond + an optional side branch)
+- [ ] **M8.2** `scripts/deploy.sh local` — module published + client served, one command
+- [ ] **M8.3** Playwright smoke test covering the Definition of Done demo path
+- [ ] **M8.4** `.github/workflows/ci.yml` green on `main`
+- [ ] **M8.5** `docs/testing-runbook.md` — human walkthrough, under 10 minutes
+- [ ] **M8.6** Tag `v0.1.0`
+
+**Acceptance:** every item in the [Definition of Done](./mvp-scope.md#definition-of-done-for-v01) passes.
+
+---
+
+## Post-MVP parking lot
+
+Ideas encountered while building that are out of scope. **Append here instead of building them.**
+
+- (empty)
