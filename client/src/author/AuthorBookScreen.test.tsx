@@ -203,3 +203,36 @@ describe('AuthorBookScreen prerequisites', () => {
     expect(screen.getByLabelText('First', { selector: '#prereq-11-10' })).toBeChecked();
   });
 });
+
+describe('AuthorBookScreen publishing', () => {
+  beforeEach(() => {
+    sdk.ready = true;
+    sdk.calls = [];
+    sdk.rejectWith = {};
+    sdk.rows = { chapters: [], knowledgeBlocks: [], chapterDeps: [] };
+  });
+
+  it('publishes this book', async () => {
+    sdk.rows = {
+      ...sdk.rows,
+      books: [aBook({ bookId: 4n, title: 'Chaos', owner: ME, status: { tag: 'Draft' } })],
+    };
+    render(<AuthorBookScreen bookId={4n} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Publish' }));
+    expect(callTo('publishBook')[0]?.args).toEqual({ bookId: 4n });
+  });
+
+  it('shows the published state, with nothing left to press', () => {
+    sdk.rows = {
+      ...sdk.rows,
+      books: [
+        aBook({ bookId: 4n, title: 'Chaos', owner: ME, status: { tag: 'Published' } }),
+      ],
+    };
+    render(<AuthorBookScreen bookId={4n} />);
+
+    expect(screen.getByText(/readers can see/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Publish' })).not.toBeInTheDocument();
+  });
+});

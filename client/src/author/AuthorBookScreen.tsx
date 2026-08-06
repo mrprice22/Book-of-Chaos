@@ -4,6 +4,7 @@ import { reducers, tables } from '../module_bindings';
 import { AUTHOR_PATH, navigate } from '../routing/route';
 import { ChapterEditor } from './ChapterEditor';
 import { ChapterForm } from './ChapterForm';
+import { PublishPanel } from './PublishPanel';
 import { useAction } from './useAction';
 
 /** One book's chapters, with the forms that add to it. */
@@ -15,9 +16,11 @@ export function AuthorBookScreen({ bookId }: { bookId: bigint }) {
   const [deps] = useTable(tables.chapterDeps);
 
   const createChapter = useReducer(reducers.createChapter);
+  const publishBook = useReducer(reducers.publishBook);
   const chapterAction = useAction((draft: Parameters<typeof createChapter>[0]) =>
     createChapter(draft),
   );
+  const publishAction = useAction(() => publishBook({ bookId }));
 
   const book = books.find((b) => b.bookId === bookId);
   const isOwner =
@@ -56,6 +59,13 @@ export function AuthorBookScreen({ bookId }: { bookId: bigint }) {
       <button type="button" onClick={() => navigate(AUTHOR_PATH)}>
         {t('author.backToAuthor')}
       </button>
+
+      <PublishPanel
+        status={book.status}
+        onPublish={() => publishAction.run(undefined)}
+        pending={publishAction.pending}
+        error={publishAction.error}
+      />
 
       <ChapterForm
         onSubmit={(draft) => chapterAction.run({ bookId, ...draft })}
