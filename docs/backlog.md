@@ -63,7 +63,7 @@ is tested, not assumed.
 The core of the product. Keep it a pure function over a graph snapshot so it is trivially
 testable, then call it from reducers.
 
-- [ ] **M3.1** `unlock::chapter_state(graph, progress, chapter_id) -> ChapterState`
+- [x] **M3.1** `unlock::chapter_state(graph, progress, chapter_id) -> ChapterState`
 - [ ] **M3.2** `unlock::detect_cycle(graph) -> Option<Vec<ChapterId>>`
 - [ ] **M3.3** `complete_block` reducer — idempotent, writes `reader_progress`, recomputes affected chapter states
 - [ ] **M3.4** Table-driven tests: linear chain, diamond, disconnected islands, optional chapters, pinned chapters, self-cycle, 3-node cycle, empty graph

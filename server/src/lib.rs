@@ -8,6 +8,7 @@
 
 pub mod rules;
 pub mod sanitize;
+pub mod unlock;
 
 use spacetimedb::{Identity, ReducerContext, SpacetimeType, Table, Timestamp};
 
