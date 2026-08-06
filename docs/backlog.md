@@ -88,7 +88,7 @@ by table-driven tests including every degenerate graph shape listed above.
 ## M5 — Reader experience
 
 - [x] **M5.1** Book landing page: title, description, chapter count, estimated read time
-- [ ] **M5.2** Chapter view: ordered blocks, sanitized HTML render, "Mark as complete"
+- [x] **M5.2** Chapter view: ordered blocks, sanitized HTML render, "Mark as complete"
 - [ ] **M5.3** Live subscription — completing a block updates state without a reload
 - [ ] **M5.4** Blocked chapters are visibly locked and unreachable by direct URL
 

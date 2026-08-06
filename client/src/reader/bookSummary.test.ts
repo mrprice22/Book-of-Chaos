@@ -1,58 +1,5 @@
-import { Identity, Timestamp } from 'spacetimedb';
-import type { Book, Chapter, KnowledgeBlock } from '../module_bindings/types';
+import { aBlock, aBook, aChapter, prose } from '../test/factories';
 import { countWords, summarizeBook } from './bookSummary';
-
-const NOW = new Timestamp(0n);
-const OWNER = Identity.zero();
-
-function book(bookId: bigint): Book {
-  return {
-    bookId,
-    owner: OWNER,
-    title: 'A Book',
-    description: 'About things',
-    status: { tag: 'Published' },
-    locale: undefined,
-    createdAt: NOW,
-    updatedAt: NOW,
-  };
-}
-
-function chapter(chapterId: bigint, bookId: bigint): Chapter {
-  return {
-    chapterId,
-    bookId,
-    title: 'A Chapter',
-    description: '',
-    position: 0,
-    isOptional: false,
-    isPinned: false,
-    locale: undefined,
-    createdAt: NOW,
-    updatedAt: NOW,
-  };
-}
-
-function block(blockId: bigint, chapterId: bigint, bodyHtml: string): KnowledgeBlock {
-  return {
-    blockId,
-    chapterId,
-    title: 'A Block',
-    blockType: { tag: 'Reading' },
-    bodyHtml,
-    url: undefined,
-    position: 0,
-    isOptional: false,
-    locale: undefined,
-    createdAt: NOW,
-    updatedAt: NOW,
-  };
-}
-
-/** `n` words of prose wrapped in a paragraph. */
-function prose(n: number): string {
-  return `<p>${Array.from({ length: n }, () => 'word').join(' ')}</p>`;
-}
 
 describe('countWords', () => {
   it.each([
@@ -76,8 +23,12 @@ describe('countWords', () => {
 describe('summarizeBook', () => {
   it('counts only the chapters belonging to this book', () => {
     const summary = summarizeBook(
-      book(1n),
-      [chapter(10n, 1n), chapter(11n, 1n), chapter(20n, 2n)],
+      aBook({ bookId: 1n }),
+      [
+        aChapter({ chapterId: 10n, bookId: 1n }),
+        aChapter({ chapterId: 11n, bookId: 1n }),
+        aChapter({ chapterId: 20n, bookId: 2n }),
+      ],
       [],
     );
     expect(summary.chapterCount).toBe(2);
@@ -85,21 +36,30 @@ describe('summarizeBook', () => {
 
   it('counts only the blocks belonging to this book’s chapters', () => {
     const summary = summarizeBook(
-      book(1n),
-      [chapter(10n, 1n), chapter(20n, 2n)],
-      [block(100n, 10n, prose(225)), block(200n, 20n, prose(2250))],
+      aBook({ bookId: 1n }),
+      [
+        aChapter({ chapterId: 10n, bookId: 1n }),
+        aChapter({ chapterId: 20n, bookId: 2n }),
+      ],
+      [
+        aBlock({ blockId: 100n, chapterId: 10n, bodyHtml: prose(225) }),
+        aBlock({ blockId: 200n, chapterId: 20n, bodyHtml: prose(2250) }),
+      ],
     );
     expect(summary.readMinutes).toBe(1);
   });
 
   it('estimates reading time across every block in the book', () => {
     const summary = summarizeBook(
-      book(1n),
-      [chapter(10n, 1n), chapter(11n, 1n)],
+      aBook({ bookId: 1n }),
       [
-        block(100n, 10n, prose(225)),
-        block(101n, 10n, prose(225)),
-        block(102n, 11n, prose(450)),
+        aChapter({ chapterId: 10n, bookId: 1n }),
+        aChapter({ chapterId: 11n, bookId: 1n }),
+      ],
+      [
+        aBlock({ blockId: 100n, chapterId: 10n, bodyHtml: prose(225) }),
+        aBlock({ blockId: 101n, chapterId: 10n, bodyHtml: prose(225) }),
+        aBlock({ blockId: 102n, chapterId: 11n, bodyHtml: prose(450) }),
       ],
     );
     expect(summary.readMinutes).toBe(4);
@@ -107,18 +67,18 @@ describe('summarizeBook', () => {
 
   it('rounds a short book up to one minute rather than down to zero', () => {
     const summary = summarizeBook(
-      book(1n),
-      [chapter(10n, 1n)],
-      [block(100n, 10n, prose(5))],
+      aBook(),
+      [aChapter({ chapterId: 10n, bookId: 1n })],
+      [aBlock({ chapterId: 10n, bodyHtml: prose(5) })],
     );
     expect(summary.readMinutes).toBe(1);
   });
 
   it('reports zero minutes for a book with no content, which is a different fact', () => {
-    expect(summarizeBook(book(1n), [chapter(10n, 1n)], []).readMinutes).toBe(0);
+    expect(summarizeBook(aBook(), [aChapter({ bookId: 1n })], []).readMinutes).toBe(0);
   });
 
   it('handles a book with no chapters at all', () => {
-    expect(summarizeBook(book(1n), [], [])).toEqual({ chapterCount: 0, readMinutes: 0 });
+    expect(summarizeBook(aBook(), [], [])).toEqual({ chapterCount: 0, readMinutes: 0 });
   });
 });

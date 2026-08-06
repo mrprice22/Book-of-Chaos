@@ -1,6 +1,17 @@
 import { t } from './i18n';
+import { ChapterScreen } from './reader/ChapterScreen';
 import { Library } from './reader/Library';
+import { useRoute } from './routing/route';
 import { useConnectionStatus } from './spacetime/useConnectionStatus';
+
+function Screen() {
+  const route = useRoute();
+  return route.name === 'chapter' ? (
+    <ChapterScreen chapterId={route.chapterId} />
+  ) : (
+    <Library />
+  );
+}
 
 export function App() {
   const status = useConnectionStatus();
@@ -21,7 +32,7 @@ export function App() {
           </span>
         )}
       </p>
-      {status.kind === 'connected' && <Library />}
+      {status.kind === 'connected' && <Screen />}
     </main>
   );
 }
