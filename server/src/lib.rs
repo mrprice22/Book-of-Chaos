@@ -588,3 +588,94 @@ fn find_block(ctx: &ReducerContext, block_id: u64) -> Result<KnowledgeBlock, Str
         .find(block_id)
         .ok_or_else(|| "That block no longer exists.".to_string())
 }
+
+// ---------------------------------------------------------------------------
+// Reader progress
+// ---------------------------------------------------------------------------
+
+/// Mark a block complete for the calling reader.
+///
+/// Idempotent: a second call is a no-op that returns `Ok`. Completion is the
+/// presence of a row, so there is nothing to toggle and a double-click, a retry
+/// after a dropped connection, and two tabs racing all converge on the same
+/// single row.
+///
+/// The chapter's unlock state is recomputed *before* the write and the call is
+/// refused if the chapter is Blocked. Without that, a client could call this
+/// reducer directly for every block in a locked book and unlock it one call at
+/// a time — the map is UX, this is the boundary.
+///
+/// Nothing is recomputed *after* the write: chapter state is derived from
+/// `reader_progress` rather than stored, so the subscription that carries the
+/// new row is the same thing that moves the node on the map.
+#[spacetimedb::reducer]
+pub fn complete_block(ctx: &ReducerContext, block_id: u64) -> Result<(), String> {
+    let reader = ctx.sender();
+    let block = find_block(ctx, block_id)?;
+    let chapter = find_chapter(ctx, block.chapter_id)?;
+
+    let graph = graph_for_book(ctx, chapter.book_id);
+    let progress = progress_for_reader(ctx, reader);
+    rules::can_complete_block(unlock::chapter_state(&graph, &progress, chapter.chapter_id))?;
+
+    if progress.has_completed(block_id) {
+        return Ok(());
+    }
+    ctx.db.reader_progress().insert(ReaderProgress {
+        progress_id: 0, // assigned by #[auto_inc]
+        identity: reader,
+        block_id,
+        completed_at: ctx.timestamp,
+    });
+    Ok(())
+}
+
+/// Assemble the unlock engine's view of one book.
+///
+/// Scoped to the book because prerequisites cannot cross books, so this is the
+/// smallest snapshot that can answer any question about it.
+fn graph_for_book(ctx: &ReducerContext, book_id: u64) -> unlock::Graph {
+    let chapters = ctx
+        .db
+        .chapters()
+        .book_id()
+        .filter(book_id)
+        .map(|c| unlock::ChapterNode {
+            chapter_id: c.chapter_id,
+            is_optional: c.is_optional,
+            is_pinned: c.is_pinned,
+            prerequisites: ctx
+                .db
+                .chapter_deps()
+                .chapter_id()
+                .filter(c.chapter_id)
+                .map(|d| d.depends_on_chapter_id)
+                .collect(),
+            blocks: ctx
+                .db
+                .knowledge_blocks()
+                .chapter_id()
+                .filter(c.chapter_id)
+                .map(|b| unlock::BlockNode {
+                    block_id: b.block_id,
+                    is_optional: b.is_optional,
+                })
+                .collect(),
+        })
+        .collect();
+    unlock::Graph::new(chapters)
+}
+
+/// One reader's completed blocks, across every book.
+///
+/// Not filtered to the book: block ids are unique platform-wide, so a wider set
+/// cannot change an answer, and filtering would cost a second lookup per row.
+fn progress_for_reader(ctx: &ReducerContext, reader: Identity) -> unlock::Progress {
+    unlock::Progress::from_completed_blocks(
+        ctx.db
+            .reader_progress()
+            .identity()
+            .filter(reader)
+            .map(|p| p.block_id),
+    )
+}

@@ -65,7 +65,7 @@ testable, then call it from reducers.
 
 - [x] **M3.1** `unlock::chapter_state(graph, progress, chapter_id) -> ChapterState`
 - [x] **M3.2** `unlock::detect_cycle(graph) -> Option<Vec<ChapterId>>`
-- [ ] **M3.3** `complete_block` reducer — idempotent, writes `reader_progress`, recomputes affected chapter states
+- [x] **M3.3** `complete_block` reducer — idempotent, writes `reader_progress`, recomputes affected chapter states
 - [ ] **M3.4** Table-driven tests: linear chain, diamond, disconnected islands, optional chapters, pinned chapters, self-cycle, 3-node cycle, empty graph
 
 **Acceptance:** unlock logic has no SpacetimeDB dependency in its signature and is covered
@@ -143,6 +143,18 @@ Ideas encountered while building that are out of scope. **Append here instead of
   happy paths end to end; a rejection-path harness that publishes to a local
   instance and calls reducers over the CLI would close the rest, and is the
   right shape of work once the client exists.
+
+- **Chapter state will be computed twice — once in Rust, once in TypeScript.**
+  M3.3 derives chapter state from `reader_progress` on read rather than
+  materialising it into a table, so the map (M6) has to compute the same four
+  states client-side from the subscription. The alternative — a
+  `(reader, chapter) -> state` table maintained by the reducer — needs rows for
+  chapters the reader has never touched, and needs every reader's rows
+  recomputed whenever an author edits a dependency. That is a cache-invalidation
+  problem in exchange for removing a ~20-line function. The server stays
+  authoritative: `complete_block` refuses a Blocked chapter, so the TS copy is
+  UX, per the trust-boundary rule in CLAUDE.md. Worth revisiting only if the two
+  ever disagree.
 
 - **wasm-opt / binaryen not installed.** `spacetime publish` warns "Could not find
   wasm-opt to optimise the module" and ships an unoptimised wasm. Harmless for the

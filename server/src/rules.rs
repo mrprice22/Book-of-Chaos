@@ -298,9 +298,33 @@ pub fn validate_chapter_deps(
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Reading
+// ---------------------------------------------------------------------------
+
+/// Whether a reader may mark a block complete, given the state of the chapter it
+/// lives in.
+///
+/// This is the reader-side trust boundary. Without it a client could complete
+/// blocks in any order and walk itself through a locked book one reducer call at
+/// a time — the map would show the chapter as Blocked while the progress rows
+/// said otherwise, and the graph would stop meaning anything.
+///
+/// `Complete` is allowed through: a chapter finishes when its non-optional
+/// blocks are done, so its optional blocks are still there to be read.
+pub fn can_complete_block(state: crate::unlock::ChapterState) -> Result<(), String> {
+    match state {
+        crate::unlock::ChapterState::Blocked => {
+            Err("Finish this chapter's prerequisites first.".to_string())
+        }
+        _ => Ok(()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::unlock::ChapterState;
 
     #[test]
     fn accepts_a_plain_username() {
@@ -624,6 +648,24 @@ mod tests {
         // in `other_edges` and must not make (1 -> 2) look like a cycle.
         assert!(validate_chapter_deps(2, &[], &[1, 2], &[]).is_ok());
         assert!(validate_chapter_deps(1, &[2], &[1, 2], &[]).is_ok());
+    }
+
+    // --- reading -------------------------------------------------------------
+
+    #[test]
+    fn a_reader_may_complete_blocks_in_a_reachable_chapter() {
+        assert!(can_complete_block(ChapterState::Available).is_ok());
+        assert!(can_complete_block(ChapterState::InProgress).is_ok());
+        // A finished chapter can still have optional blocks left to read.
+        assert!(can_complete_block(ChapterState::Complete).is_ok());
+    }
+
+    #[test]
+    fn a_reader_may_not_complete_blocks_in_a_blocked_chapter() {
+        // The load-bearing case: a hostile client calling the reducer directly
+        // must not be able to walk itself through a locked book.
+        let err = can_complete_block(ChapterState::Blocked).unwrap_err();
+        assert!(err.contains("prerequisites"), "unhelpful message: {err}");
     }
 
     #[test]
