@@ -1,4 +1,6 @@
 import { t } from './i18n';
+import { AuthorBookScreen } from './author/AuthorBookScreen';
+import { AuthorScreen } from './author/AuthorScreen';
 import { ChapterScreen } from './reader/ChapterScreen';
 import { Library } from './reader/Library';
 import { useRoute } from './routing/route';
@@ -6,11 +8,16 @@ import { useConnectionStatus } from './spacetime/useConnectionStatus';
 
 function Screen() {
   const route = useRoute();
-  return route.name === 'chapter' ? (
-    <ChapterScreen chapterId={route.chapterId} />
-  ) : (
-    <Library />
-  );
+  switch (route.name) {
+    case 'chapter':
+      return <ChapterScreen chapterId={route.chapterId} />;
+    case 'author':
+      return <AuthorScreen />;
+    case 'authorBook':
+      return <AuthorBookScreen bookId={route.bookId} />;
+    case 'home':
+      return <Library />;
+  }
 }
 
 export function App() {

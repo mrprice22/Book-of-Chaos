@@ -109,7 +109,7 @@ by table-driven tests including every degenerate graph shape listed above.
 
 ## M7 — Author experience
 
-- [ ] **M7.1** Create book / chapter / block forms
+- [x] **M7.1** Create book / chapter / block forms
 - [ ] **M7.2** Chapter prerequisite multi-select; cycle rejection surfaced as a readable error
 - [ ] **M7.3** Publish toggle (`Draft` → `Published`)
 - [ ] **M7.4** Author-only routes hidden and server-side rejected for non-owners
