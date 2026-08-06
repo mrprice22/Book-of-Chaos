@@ -30,6 +30,9 @@ rustup target add wasm32-unknown-unknown
 export NVM_DIR="$HOME/.nvm"
 if [ ! -s "$NVM_DIR/nvm.sh" ]; then
   log "installing nvm"
+  # The installer aborts if NVM_DIR is set but absent, and it git-clones into the
+  # directory, so it must exist and be empty rather than merely be named.
+  mkdir -p "$NVM_DIR"
   curl -sSf -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
 fi
 # shellcheck disable=SC1091
