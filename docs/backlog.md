@@ -112,7 +112,7 @@ by table-driven tests including every degenerate graph shape listed above.
 - [x] **M7.1** Create book / chapter / block forms
 - [x] **M7.2** Chapter prerequisite multi-select; cycle rejection surfaced as a readable error
 - [x] **M7.3** Publish toggle (`Draft` → `Published`)
-- [ ] **M7.4** Author-only routes hidden and server-side rejected for non-owners
+- [x] **M7.4** Author-only routes hidden and server-side rejected for non-owners
 
 **Acceptance:** the demo book can be built end to end through the UI, with no SQL and no CLI.
 
@@ -135,14 +135,15 @@ by table-driven tests including every degenerate graph shape listed above.
 
 Ideas encountered while building that are out of scope. **Append here instead of building them.**
 
-- **Reducer wiring is not covered by unit tests.** Every rule in `rules.rs` is
-  tested directly, and every mutating reducer is verified by inspection to call
-  one before it mutates — but nothing would catch someone *deleting* a
-  `rules::require_owner(...)` line from a reducer, because SpacetimeDB reducers
-  need a running database to invoke. The Playwright smoke test (M8.3) covers the
-  happy paths end to end; a rejection-path harness that publishes to a local
-  instance and calls reducers over the CLI would close the rest, and is the
-  right shape of work once the client exists.
+- **Reducer wiring is not covered by *automated* tests.** Every rule in
+  `rules.rs` is tested directly, and every mutating reducer is verified by
+  inspection to call one before it mutates — but nothing in `verify.sh` would
+  catch someone *deleting* a `rules::require_owner(...)` line, because
+  SpacetimeDB reducers need a running database to invoke. M7.4 confirmed all six
+  author writes are refused for a non-owner against a live instance, via a
+  throwaway TS harness over the real SDK (2026-08-06); that harness is the right
+  shape for a permanent stage, but it cannot join the gate until CI can bring up
+  a database. The Playwright smoke test (M8.3) will cover the happy paths.
 
 - **Chapter state will be computed twice — once in Rust, once in TypeScript.**
   M3.3 derives chapter state from `reader_progress` on read rather than

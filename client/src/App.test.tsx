@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { Identity } from 'spacetimedb';
 import { App } from './App';
 
@@ -17,14 +18,31 @@ vi.mock('spacetimedb/react', () => ({
   // App's concern is the connection banner; Library has its own tests, so here it
   // subscribes to an empty, settled database.
   useTable: () => [[], true],
+  useReducer: () => () => Promise.resolve(),
+}));
+
+vi.mock('mermaid', () => ({
+  default: {
+    render: () => Promise.resolve({ svg: '<svg></svg>' }),
+    initialize: () => {},
+  },
 }));
 
 const IDENTITY = 'c0ffee'.padStart(64, '0');
 
 describe('App', () => {
   beforeEach(() => {
+    window.history.pushState({}, '', '/');
     sdk.state = { isActive: false, identity: undefined, connectionError: undefined };
   });
+
+  const connected = () => {
+    sdk.state = {
+      isActive: true,
+      identity: Identity.fromString(IDENTITY),
+      connectionError: undefined,
+    };
+  };
 
   it('reports that it is connecting before the handshake completes', () => {
     render(<App />);
@@ -50,5 +68,45 @@ describe('App', () => {
     };
     render(<App />);
     expect(screen.getByText(/retrying/i)).toBeInTheDocument();
+  });
+
+  it('offers no navigation and no screen before the connection is up', () => {
+    render(<App />);
+    expect(screen.queryByRole('navigation')).not.toBeInTheDocument();
+  });
+
+  it('reaches the author area only through the nav', async () => {
+    connected();
+    render(<App />);
+    expect(screen.queryByRole('heading', { name: 'Author' })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Author' }));
+    expect(window.location.pathname).toBe('/author');
+    expect(screen.getByRole('heading', { name: 'Author' })).toBeInTheDocument();
+  });
+
+  it('marks which section the reader is in', async () => {
+    connected();
+    render(<App />);
+    expect(screen.getByRole('button', { name: 'Read' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Author' }));
+    expect(screen.getByRole('button', { name: 'Author' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    expect(screen.getByRole('button', { name: 'Read' })).not.toHaveAttribute(
+      'aria-current',
+    );
+  });
+
+  it('opens an author book URL directly, and refuses it — the row is not the caller’s', () => {
+    connected();
+    window.history.pushState({}, '', '/author/book/1');
+    render(<App />);
+    expect(screen.getByText(/does not exist, or is not yours/i)).toBeInTheDocument();
   });
 });

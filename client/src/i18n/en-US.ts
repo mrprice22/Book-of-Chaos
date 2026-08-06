@@ -16,6 +16,8 @@ export const enUS = {
   'book.chapterCount.other': '{count} chapters',
   'book.readTime': 'About {minutes} min read',
   'book.readTime.empty': 'No content yet',
+  'nav.read': 'Read',
+  'nav.author': 'Author',
   'author.title': 'Author',
   'author.yourBooks': 'Your books',
   'author.noBooks': 'You have not created a book yet.',
