@@ -186,3 +186,77 @@ pub fn claim_username(ctx: &ReducerContext, username: String) -> Result<(), Stri
     });
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Book reducers
+// ---------------------------------------------------------------------------
+
+/// Create a book. The caller becomes its Owner — the only writing role in v0.1.
+#[spacetimedb::reducer]
+pub fn create_book(ctx: &ReducerContext, title: String, description: String) -> Result<(), String> {
+    // The creator is the owner by definition, so the owner check is trivially
+    // satisfied here; it is still routed through the same rule so that all four
+    // book reducers share one code path.
+    rules::can_write_book(true, &title, &description)?;
+
+    ctx.db.books().insert(Book {
+        book_id: 0, // assigned by #[auto_inc]
+        owner: ctx.sender(),
+        title: title.trim().to_string(),
+        description,
+        status: BookStatus::Draft,
+        locale: None,
+        created_at: ctx.timestamp,
+        updated_at: ctx.timestamp,
+    });
+    Ok(())
+}
+
+#[spacetimedb::reducer]
+pub fn update_book(
+    ctx: &ReducerContext,
+    book_id: u64,
+    title: String,
+    description: String,
+) -> Result<(), String> {
+    let book = find_book(ctx, book_id)?;
+    rules::can_write_book(book.owner == ctx.sender(), &title, &description)?;
+
+    ctx.db.books().book_id().update(Book {
+        title: title.trim().to_string(),
+        description,
+        updated_at: ctx.timestamp,
+        ..book
+    });
+    Ok(())
+}
+
+/// Flip `Draft` -> `Published`. No snapshots, no versioning — that is deferred.
+///
+/// Idempotent: publishing an already-published book succeeds and changes nothing,
+/// so a double-click cannot produce an error the author has to reason about.
+#[spacetimedb::reducer]
+pub fn publish_book(ctx: &ReducerContext, book_id: u64) -> Result<(), String> {
+    let book = find_book(ctx, book_id)?;
+    rules::require_owner(book.owner == ctx.sender())?;
+
+    if book.status == BookStatus::Published {
+        return Ok(());
+    }
+    ctx.db.books().book_id().update(Book {
+        status: BookStatus::Published,
+        updated_at: ctx.timestamp,
+        ..book
+    });
+    Ok(())
+}
+
+/// Shared lookup. The "not found" message is deliberately the same one a
+/// non-owner would eventually see, so probing for book IDs reveals nothing.
+fn find_book(ctx: &ReducerContext, book_id: u64) -> Result<Book, String> {
+    ctx.db
+        .books()
+        .book_id()
+        .find(book_id)
+        .ok_or_else(|| "That book no longer exists.".to_string())
+}

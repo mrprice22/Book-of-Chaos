@@ -73,6 +73,57 @@ pub fn can_claim_username(
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Books
+// ---------------------------------------------------------------------------
+
+pub const TITLE_MAX: usize = 200;
+pub const DESCRIPTION_MAX: usize = 4_000;
+
+/// Titles are trimmed by the caller before reaching here; a title that is only
+/// whitespace is empty as far as a reader is concerned.
+pub fn validate_title(title: &str) -> Result<(), String> {
+    if title.trim().is_empty() {
+        return Err("Give it a title.".to_string());
+    }
+    if title.chars().count() > TITLE_MAX {
+        return Err(format!("Titles can be at most {TITLE_MAX} characters."));
+    }
+    Ok(())
+}
+
+pub fn validate_description(description: &str) -> Result<(), String> {
+    if description.chars().count() > DESCRIPTION_MAX {
+        return Err(format!(
+            "Descriptions can be at most {DESCRIPTION_MAX} characters."
+        ));
+    }
+    Ok(())
+}
+
+/// The authorization half of every author-side reducer.
+///
+/// Owner is the only writing role in v0.1, so this is deliberately one bool. It
+/// exists as a named function rather than an inline `if` so that "did we check
+/// authorization?" is greppable, and so the refusal message stays identical
+/// across reducers — a message that varies by call site tells an attacker which
+/// check they tripped.
+pub fn require_owner(is_owner: bool) -> Result<(), String> {
+    if is_owner {
+        Ok(())
+    } else {
+        Err("Only the owner of this book can change it.".to_string())
+    }
+}
+
+/// Owner check first, then inputs. Both halves in the order CLAUDE.md mandates.
+pub fn can_write_book(is_owner: bool, title: &str, description: &str) -> Result<(), String> {
+    require_owner(is_owner)?;
+    validate_title(title)?;
+    validate_description(description)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -153,5 +204,47 @@ mod tests {
         // name exists and would be a confusing message besides.
         let err = can_claim_username(false, true, "Ada!").unwrap_err();
         assert!(err.contains("lowercase"), "unhelpful message: {err}");
+    }
+
+    // --- books ---------------------------------------------------------------
+
+    #[test]
+    fn accepts_a_reasonable_book() {
+        assert!(can_write_book(true, "Chaos Theory", "An introduction.").is_ok());
+        // An empty description is fine; an empty title is not.
+        assert!(can_write_book(true, "Chaos Theory", "").is_ok());
+    }
+
+    #[test]
+    fn rejects_empty_or_whitespace_title() {
+        assert!(validate_title("").is_err());
+        assert!(validate_title("   ").is_err());
+        assert!(validate_title("\t\n").is_err());
+    }
+
+    #[test]
+    fn rejects_overlong_title_and_description() {
+        assert!(validate_title(&"a".repeat(TITLE_MAX + 1)).is_err());
+        assert!(validate_title(&"a".repeat(TITLE_MAX)).is_ok());
+        assert!(validate_description(&"a".repeat(DESCRIPTION_MAX + 1)).is_err());
+        assert!(validate_description(&"a".repeat(DESCRIPTION_MAX)).is_ok());
+    }
+
+    #[test]
+    fn non_owner_is_rejected() {
+        let err = require_owner(false).unwrap_err();
+        assert!(err.contains("owner"), "unhelpful message: {err}");
+        assert!(require_owner(true).is_ok());
+    }
+
+    #[test]
+    fn authorization_is_checked_before_input_validation() {
+        // A non-owner sending garbage must be told they lack permission, not that
+        // their title is empty: the reply must not confirm the book is editable.
+        let err = can_write_book(false, "", "").unwrap_err();
+        assert!(
+            err.contains("owner"),
+            "leaked validation to a non-owner: {err}"
+        );
     }
 }
