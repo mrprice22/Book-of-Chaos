@@ -16,6 +16,17 @@ body {
   opacity: 0.75;
 }
 
+.knowledge-map {
+  /* A wide graph scrolls inside its own box rather than widening the page. */
+  overflow-x: auto;
+  margin-block: 1.5rem;
+}
+
+.knowledge-map svg {
+  max-inline-size: 100%;
+  block-size: auto;
+}
+
 .connection {
   font-size: 0.875rem;
   opacity: 0.75;

@@ -121,3 +121,68 @@ describe('BookMap', () => {
     expect(lastSource()).not.toContain('c9[');
   });
 });
+
+describe('BookMap live updates', () => {
+  const chapters = [
+    aChapter({ chapterId: 1n, bookId: 1n, title: 'One' }),
+    aChapter({ chapterId: 2n, bookId: 1n, title: 'Two' }),
+  ];
+  const blocks = [
+    aBlock({ blockId: 10n, chapterId: 1n }),
+    aBlock({ blockId: 20n, chapterId: 2n }),
+  ];
+  const deps = [{ depId: 1n, chapterId: 2n, dependsOnChapterId: 1n }];
+
+  beforeEach(() => {
+    mermaidMock.render.mockClear();
+    sdk.ready = true;
+    sdk.rows = {
+      chapters,
+      knowledgeBlocks: blocks,
+      chapterDeps: deps,
+      readerProgress: [],
+    };
+  });
+
+  it('unlocks a downstream node when progress arrives, with no reload', async () => {
+    const { rerender } = render(<BookMap bookId={1n} />);
+    await waitFor(() => expect(mermaidMock.render).toHaveBeenCalled());
+    expect(lastSource()).toContain('class c2 blocked');
+
+    // complete_block wrote a row; the subscription delivered it.
+    sdk.rows = {
+      ...sdk.rows,
+      readerProgress: [someProgress({ identity: READER, blockId: 10n })],
+    };
+    rerender(<BookMap bookId={1n} />);
+
+    await waitFor(() => expect(lastSource()).toContain('class c2 available'));
+    expect(lastSource()).toContain('class c1 complete');
+  });
+
+  it('redraws when an author adds a chapter', async () => {
+    const { rerender } = render(<BookMap bookId={1n} />);
+    await waitFor(() => expect(mermaidMock.render).toHaveBeenCalled());
+    expect(lastSource()).not.toContain('c3[');
+
+    sdk.rows = {
+      ...sdk.rows,
+      chapters: [...chapters, aChapter({ chapterId: 3n, bookId: 1n, title: 'Three' })],
+    };
+    rerender(<BookMap bookId={1n} />);
+
+    await waitFor(() => expect(lastSource()).toContain('c3['));
+  });
+
+  it('does not re-render mermaid when the graph is unchanged', async () => {
+    const { rerender } = render(<BookMap bookId={1n} />);
+    await waitFor(() => expect(mermaidMock.render).toHaveBeenCalledTimes(1));
+
+    // A subscription update elsewhere in the database produces identical source, and
+    // identical source must not trigger a redraw — that is what the byte-identical
+    // ordering in M6.1 buys.
+    sdk.rows = { ...sdk.rows };
+    rerender(<BookMap bookId={1n} />);
+    await waitFor(() => expect(mermaidMock.render).toHaveBeenCalledTimes(1));
+  });
+});
