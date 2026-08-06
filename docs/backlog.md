@@ -51,7 +51,7 @@ working `cargo --version`, `node --version`, and `spacetime --version` via one c
 - [x] **M2.3** `create_chapter` / `update_chapter` / `reorder_chapters`
 - [x] **M2.4** `create_block` / `update_block` / `delete_block` — HTML body sanitized server-side
 - [x] **M2.5** `set_chapter_deps` — rejects self-reference, missing chapters, and cycles
-- [ ] **M2.6** Unit tests for every rejection path above
+- [x] **M2.6** Unit tests for every rejection path above
 
 **Acceptance:** every reducer has at least one happy-path and one rejection test. Authorization
 is tested, not assumed.
@@ -134,6 +134,15 @@ by table-driven tests including every degenerate graph shape listed above.
 ## Post-MVP parking lot
 
 Ideas encountered while building that are out of scope. **Append here instead of building them.**
+
+- **Reducer wiring is not covered by unit tests.** Every rule in `rules.rs` is
+  tested directly, and every mutating reducer is verified by inspection to call
+  one before it mutates — but nothing would catch someone *deleting* a
+  `rules::require_owner(...)` line from a reducer, because SpacetimeDB reducers
+  need a running database to invoke. The Playwright smoke test (M8.3) covers the
+  happy paths end to end; a rejection-path harness that publishes to a local
+  instance and calls reducers over the CLI would close the rest, and is the
+  right shape of work once the client exists.
 
 - **wasm-opt / binaryen not installed.** `spacetime publish` warns "Could not find
   wasm-opt to optimise the module" and ships an unoptimised wasm. Harmless for the

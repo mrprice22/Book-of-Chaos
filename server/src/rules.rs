@@ -208,6 +208,16 @@ pub fn validate_body(body_html: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// A `Reading` block has no URL of its own. A stray value is dropped rather than
+/// rejected: it is a client bug, not an attack, and the author cannot see the
+/// field to fix it — see `validate_block_url`.
+pub fn resolve_block_url(is_resource_link: bool, url: Option<String>) -> Option<String> {
+    if !is_resource_link {
+        return None;
+    }
+    url.map(|u| u.trim().to_string()).filter(|u| !u.is_empty())
+}
+
 /// Authorization first, then inputs — same order as the book and chapter rules.
 pub fn can_write_block(
     is_owner: bool,
@@ -221,6 +231,20 @@ pub fn can_write_block(
     validate_body(body_html)?;
     validate_block_url(is_resource_link, url)?;
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Ordering
+// ---------------------------------------------------------------------------
+
+/// Where a newly created chapter or block lands: at the end.
+///
+/// Positions are assigned server-side because the client cannot see concurrent
+/// inserts, so any position it proposes is a guess. Taking `max + 1` rather than
+/// `len` means a gap left by an older bug never causes a collision — two rows
+/// sharing a position would make the reader's ordering depend on scan order.
+pub fn next_position(existing: &[u32]) -> u32 {
+    existing.iter().copied().max().map_or(0, |max| max + 1)
 }
 
 // ---------------------------------------------------------------------------
@@ -582,6 +606,44 @@ mod tests {
     fn rejects_an_overlong_body() {
         assert!(validate_body(&"a".repeat(BODY_MAX)).is_ok());
         assert!(validate_body(&"a".repeat(BODY_MAX + 1)).is_err());
+    }
+
+    #[test]
+    fn reading_block_never_stores_a_url() {
+        // The field is not author-visible on a Reading block, so a value that
+        // arrives anyway is dropped rather than persisted.
+        assert_eq!(resolve_block_url(false, Some("https://e.com".into())), None);
+        assert_eq!(resolve_block_url(false, None), None);
+    }
+
+    #[test]
+    fn resource_link_url_is_trimmed_and_blank_becomes_none() {
+        assert_eq!(
+            resolve_block_url(true, Some("  https://e.com  ".into())),
+            Some("https://e.com".to_string())
+        );
+        assert_eq!(resolve_block_url(true, Some("   ".into())), None);
+    }
+
+    // --- ordering ------------------------------------------------------------
+
+    #[test]
+    fn first_item_lands_at_zero() {
+        assert_eq!(next_position(&[]), 0);
+    }
+
+    #[test]
+    fn new_items_append() {
+        assert_eq!(next_position(&[0, 1, 2]), 3);
+        // Order of the input must not matter — it comes from an unordered scan.
+        assert_eq!(next_position(&[2, 0, 1]), 3);
+    }
+
+    #[test]
+    fn a_gap_does_not_cause_a_collision() {
+        // max + 1, not len: with a gap, `len` would reuse a live position and two
+        // rows sharing one would make ordering depend on scan order.
+        assert_eq!(next_position(&[0, 5]), 6);
     }
 
     // --- dependency graph ----------------------------------------------------

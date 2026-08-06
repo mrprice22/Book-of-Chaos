@@ -284,21 +284,20 @@ pub fn create_chapter(
     let book = find_book(ctx, book_id)?;
     rules::can_write_chapter(book.owner == ctx.sender(), &title, &description)?;
 
-    let next_position = ctx
+    let positions: Vec<u32> = ctx
         .db
         .chapters()
         .book_id()
         .filter(book_id)
-        .map(|c| c.position + 1)
-        .max()
-        .unwrap_or(0);
+        .map(|c| c.position)
+        .collect();
 
     ctx.db.chapters().insert(Chapter {
         chapter_id: 0, // assigned by #[auto_inc]
         book_id,
         title: title.trim().to_string(),
         description,
-        position: next_position,
+        position: rules::next_position(&positions),
         is_optional,
         is_pinned,
         locale: None,
@@ -478,14 +477,13 @@ pub fn create_block(
         url.as_deref(),
     )?;
 
-    let next_position = ctx
+    let positions: Vec<u32> = ctx
         .db
         .knowledge_blocks()
         .chapter_id()
         .filter(chapter_id)
-        .map(|b| b.position + 1)
-        .max()
-        .unwrap_or(0);
+        .map(|b| b.position)
+        .collect();
 
     ctx.db.knowledge_blocks().insert(KnowledgeBlock {
         block_id: 0, // assigned by #[auto_inc]
@@ -493,8 +491,8 @@ pub fn create_block(
         title: title.trim().to_string(),
         block_type,
         body_html: sanitize::sanitize_html(&body_html),
-        url: normalize_block_url(is_resource_link, url),
-        position: next_position,
+        url: rules::resolve_block_url(is_resource_link, url),
+        position: rules::next_position(&positions),
         is_optional,
         locale: None,
         created_at: ctx.timestamp,
@@ -532,7 +530,7 @@ pub fn update_block(
         title: title.trim().to_string(),
         block_type,
         body_html: sanitize::sanitize_html(&body_html),
-        url: normalize_block_url(is_resource_link, url),
+        url: rules::resolve_block_url(is_resource_link, url),
         is_optional,
         updated_at: ctx.timestamp,
         ..block
@@ -580,16 +578,6 @@ pub fn delete_block(ctx: &ReducerContext, block_id: u64) -> Result<(), String> {
         });
     }
     Ok(())
-}
-
-/// A `Reading` block has no URL of its own. Dropping a stray value here rather
-/// than rejecting it keeps `validate_block_url` permissive for the case that is
-/// a client bug, not an attack — see the rule's comment.
-fn normalize_block_url(is_resource_link: bool, url: Option<String>) -> Option<String> {
-    if !is_resource_link {
-        return None;
-    }
-    url.map(|u| u.trim().to_string()).filter(|u| !u.is_empty())
 }
 
 fn find_block(ctx: &ReducerContext, block_id: u64) -> Result<KnowledgeBlock, String> {
