@@ -26,6 +26,22 @@ export default tseslint.config(
       // type errors in SDK results — CLAUDE.md forbids both of these.
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-non-null-assertion': 'error',
+      // No user-facing copy in JSX — everything goes through `t()`. Expressed as
+      // selectors rather than eslint-plugin-react's jsx-no-literals so the rule can
+      // also catch the user-visible *attributes*, which that rule ignores.
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'JSXText[value=/[^\\s]/]',
+          message: 'User-facing text belongs in src/i18n/en-US.ts — render it with t().',
+        },
+        {
+          selector:
+            'JSXAttribute[name.name=/^(title|alt|placeholder|aria-label|aria-description)$/] > Literal',
+          message:
+            'User-facing attribute text belongs in src/i18n/en-US.ts — pass t() instead.',
+        },
+      ],
     },
   },
 );
