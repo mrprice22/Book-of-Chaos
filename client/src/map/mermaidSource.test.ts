@@ -17,8 +17,15 @@ function graphOf(chapters: bigint[], deps: [bigint, bigint][]) {
   );
 }
 
+/** Available, unflagged chapters — the uninteresting default for structural tests. */
 const titles = (ids: bigint[]) =>
-  ids.map((id) => ({ chapterId: id, title: `Chapter ${id}` }));
+  ids.map((id) => ({
+    chapterId: id,
+    title: `Chapter ${id}`,
+    state: 'Available' as const,
+    isOptional: false,
+    isPinned: false,
+  }));
 
 describe('toMermaid', () => {
   it('declares a top-down flowchart', () => {
@@ -26,12 +33,14 @@ describe('toMermaid', () => {
   });
 
   it('emits one node per chapter, labelled with its title', () => {
+    const [one, two] = titles([1n, 2n]);
+    if (!one || !two) throw new Error('fixture');
     const source = toMermaid(graphOf([1n, 2n], []), [
-      { chapterId: 1n, title: 'Beginnings' },
-      { chapterId: 2n, title: 'Middles' },
+      { ...one, title: 'Beginnings' },
+      { ...two, title: 'Middles' },
     ]);
-    expect(source).toContain('c1["Beginnings"]');
-    expect(source).toContain('c2["Middles"]');
+    expect(source).toContain('c1["○ Beginnings"]');
+    expect(source).toContain('c2["○ Middles"]');
   });
 
   it('points edges from prerequisite to dependent — the direction the reader travels', () => {
@@ -75,11 +84,13 @@ describe('toMermaid', () => {
   });
 
   it('falls back to a placeholder label for a chapter with no title supplied', () => {
-    expect(toMermaid(graphOf([7n], []), [])).toContain('c7["Chapter 7"]');
+    expect(toMermaid(graphOf([7n], []), [])).toContain('c7["🔒 Chapter 7"]');
   });
 
-  it('handles an empty book', () => {
-    expect(toMermaid(graphOf([], []), [])).toBe('flowchart TD');
+  it('handles an empty book — styles but no nodes', () => {
+    const source = toMermaid(graphOf([], []), []);
+    expect(source.split('\n')[0]).toBe('flowchart TD');
+    expect(source).not.toMatch(/^ {2}c\d+/m);
   });
 });
 
@@ -122,5 +133,66 @@ describe('node ids', () => {
 
   it.each(['', 'c', 'cx', 'chapter1', '1'])('rejects %j', (id) => {
     expect(parseNodeId(id)).toBeUndefined();
+  });
+});
+
+describe('node states and badges', () => {
+  const node = (over: Partial<Parameters<typeof toMermaid>[1][number]> = {}) => ({
+    chapterId: 1n,
+    title: 'Chapter 1',
+    state: 'Available' as const,
+    isOptional: false,
+    isPinned: false,
+    ...over,
+  });
+
+  it('defines a class for each of the four states', () => {
+    const source = toMermaid(graphOf([1n], []), [node()]);
+    for (const name of ['blocked', 'available', 'inprogress', 'complete']) {
+      expect(source).toContain(`classDef ${name} `);
+    }
+  });
+
+  it.each([
+    ['Blocked', 'blocked', '🔒'],
+    ['Available', 'available', '○'],
+    ['InProgress', 'inprogress', '◐'],
+    ['Complete', 'complete', '✓'],
+  ] as const)(
+    'marks a %s chapter with the %s class and a text badge',
+    (state, cls, badge) => {
+      const source = toMermaid(graphOf([1n], []), [node({ state })]);
+      expect(source).toContain(`class c1 ${cls}`);
+      expect(source).toContain(`c1["${badge} Chapter 1"]`);
+    },
+  );
+
+  it('badges an optional chapter', () => {
+    expect(toMermaid(graphOf([1n], []), [node({ isOptional: true })])).toContain(
+      'c1["○ Chapter 1 ⭐"]',
+    );
+  });
+
+  it('badges a pinned chapter', () => {
+    expect(toMermaid(graphOf([1n], []), [node({ isPinned: true })])).toContain(
+      'c1["○ Chapter 1 📌"]',
+    );
+  });
+
+  it('badges a chapter that is both', () => {
+    expect(
+      toMermaid(graphOf([1n], []), [node({ isOptional: true, isPinned: true })]),
+    ).toContain('c1["○ Chapter 1 ⭐ 📌"]');
+  });
+
+  it('treats a chapter with no state supplied as blocked, failing closed', () => {
+    const source = toMermaid(graphOf([1n], []), []);
+    expect(source).toContain('class c1 blocked');
+  });
+
+  it('still emits every classDef when only one state is present', () => {
+    expect(toMermaid(graphOf([1n], []), [node({ state: 'Complete' })])).toContain(
+      'classDef available ',
+    );
   });
 });

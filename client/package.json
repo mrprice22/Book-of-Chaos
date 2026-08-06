@@ -11,6 +11,7 @@
     "test": "vitest"
   },
   "dependencies": {
+    "mermaid": "^11.16.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "spacetimedb": "^2.8.0"

@@ -16,8 +16,18 @@ vi.mock('spacetimedb/react', async () => {
     await vi.importActual<typeof import('spacetimedb')>('spacetimedb');
   return {
     useTable: (query: unknown) => [sdk.rows[accessorName(query)] ?? [], sdk.ready],
+    // Library nests the map, which needs the reader's identity to state its nodes.
+    // The map has its own tests; here it only has to render without throwing.
+    useSpacetimeDB: () => ({ identity: undefined }),
   };
 });
+
+vi.mock('mermaid', () => ({
+  default: {
+    render: () => Promise.resolve({ svg: '<svg></svg>' }),
+    initialize: () => {},
+  },
+}));
 
 function seed(rows: {
   books?: Book[];

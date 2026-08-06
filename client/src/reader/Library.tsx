@@ -1,5 +1,6 @@
 import { useTable } from 'spacetimedb/react';
 import { tables } from '../module_bindings';
+import { BookMap } from '../map/BookMap';
 import { t } from '../i18n';
 import { BookLanding } from './BookLanding';
 import { summarizeBook } from './bookSummary';
@@ -32,10 +33,13 @@ export function Library() {
   }
 
   return (
-    <BookLanding
-      title={book.title}
-      description={book.description}
-      summary={summarizeBook(book, chapters, blocks)}
-    />
+    <>
+      <BookLanding
+        title={book.title}
+        description={book.description}
+        summary={summarizeBook(book, chapters, blocks)}
+      />
+      <BookMap bookId={book.bookId} />
+    </>
   );
 }

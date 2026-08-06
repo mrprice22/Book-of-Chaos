@@ -1,4 +1,4 @@
-import type { Graph } from '../reader/chapterState';
+import type { ChapterState, Graph } from '../reader/chapterState';
 
 /**
  * Mermaid flowchart source for one book's chapter graph.
@@ -11,6 +11,44 @@ import type { Graph } from '../reader/chapterState';
 export type NodeInput = {
   readonly chapterId: bigint;
   readonly title: string;
+  readonly state: ChapterState;
+  readonly isOptional: boolean;
+  readonly isPinned: boolean;
+};
+
+/**
+ * State is carried by both a badge and a class.
+ *
+ * The colours alone would leave the four states indistinguishable to a reader who
+ * cannot see the difference between them, and Mermaid gives us no other place to put
+ * a text cue — so the glyph is part of the label.
+ */
+const STATE_BADGE: Record<ChapterState, string> = {
+  Blocked: '🔒',
+  Available: '○',
+  InProgress: '◐',
+  Complete: '✓',
+};
+
+/**
+ * One class per state, plus the two flags.
+ *
+ * Colours are stated explicitly rather than inherited from a Mermaid theme: the
+ * theme follows the page's light/dark mode, and "dimmed" has to mean dimmer than the
+ * surrounding nodes in both.
+ */
+const CLASS_DEFS = [
+  'classDef blocked fill:#8882,stroke:#8886,color:#888',
+  'classDef available fill:transparent,stroke:#d99e00,stroke-width:2px',
+  'classDef inprogress fill:#2b6cb022,stroke:#2b6cb0,stroke-width:2px',
+  'classDef complete fill:#2f855a22,stroke:#2f855a,stroke-width:2px',
+];
+
+const STATE_CLASS: Record<ChapterState, string> = {
+  Blocked: 'blocked',
+  Available: 'available',
+  InProgress: 'inprogress',
+  Complete: 'complete',
 };
 
 /** Mermaid node ids must be identifier-ish; chapter ids are numeric. */
@@ -57,8 +95,7 @@ export function toMermaid(graph: Graph, nodes: readonly NodeInput[]): string {
 
   for (const id of ids) {
     const node = byId.get(id);
-    const label = escapeLabel(node?.title ?? `Chapter ${id}`);
-    lines.push(`  ${nodeId(id)}["${label}"]`);
+    lines.push(`  ${nodeId(id)}["${nodeLabel(id, node)}"]`);
   }
 
   for (const id of ids) {
@@ -73,5 +110,26 @@ export function toMermaid(graph: Graph, nodes: readonly NodeInput[]): string {
     }
   }
 
+  // classDefs are emitted unconditionally: Mermaid tolerates an unused class, and
+  // conditional style blocks would make the source depend on which states happen to
+  // be present, breaking the byte-identical guarantee above.
+  for (const def of CLASS_DEFS) lines.push(`  ${def}`);
+  for (const id of ids) {
+    const state = byId.get(id)?.state ?? 'Blocked';
+    lines.push(`  class ${nodeId(id)} ${STATE_CLASS[state]}`);
+  }
+
   return lines.join('\n');
+}
+
+/** `🔒 Title ⭐📌` — state first, author flags after. */
+function nodeLabel(chapterId: bigint, node: NodeInput | undefined): string {
+  const title = escapeLabel(node?.title ?? `Chapter ${chapterId}`);
+  const badges = [
+    STATE_BADGE[node?.state ?? 'Blocked'],
+    title,
+    node?.isOptional ? '⭐' : '',
+    node?.isPinned ? '📌' : '',
+  ];
+  return badges.filter((part) => part !== '').join(' ');
 }
