@@ -76,7 +76,7 @@ by table-driven tests including every degenerate graph shape listed above.
 ## M4 — Client scaffold
 
 - [x] **M4.1** `client/` Vite + React + TypeScript, strict mode on
-- [ ] **M4.2** SpacetimeDB TS SDK wired; `spacetime generate` bindings committed under `client/src/module_bindings/`
+- [x] **M4.2** SpacetimeDB TS SDK wired; `spacetime generate` bindings committed under `client/src/module_bindings/`
 - [ ] **M4.3** Connect on load, persist identity token in localStorage, reconnect cleanly
 - [ ] **M4.4** `i18n/en-US.ts` + `t()` helper; ESLint rule or test forbidding bare string literals in JSX
 - [ ] **M4.5** `verify.sh` gains: `tsc --noEmit`, `eslint`, `vitest run`, `vite build`

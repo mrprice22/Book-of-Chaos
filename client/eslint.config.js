@@ -5,7 +5,9 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  { ignores: ['dist'] },
+  // `src/module_bindings/` is written by `spacetime generate`. It is checked by
+  // `tsc`, but linting output nobody may hand-edit is noise.
+  { ignores: ['dist', 'src/module_bindings'] },
   {
     files: ['**/*.{ts,tsx}'],
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
