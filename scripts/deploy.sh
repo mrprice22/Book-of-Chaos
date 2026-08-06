@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+# Bring the whole thing up with one command.
+#
+#   ./scripts/deploy.sh local            SpacetimeDB + module + demo book + client
+#   ./scripts/deploy.sh local --no-seed  skip the demo book
+#   ./scripts/deploy.sh local --clear    wipe the database first
+#
+# `local` is the only target. Remote deployment needs an account and a host, which is
+# a decision for a human — see docs/blocked.md.
+#
+# Runs in the foreground: the client's dev server is the last thing started, and
+# Ctrl-C tears down whatever this script started. A SpacetimeDB instance that was
+# already running is left alone, because it is not ours to stop.
+set -euo pipefail
+
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO"
+
+DB_NAME="${SPACETIME_DB_NAME:-book-of-chaos}"
+STDB_PORT="${SPACETIME_PORT:-3000}"
+STDB_HOST="http://localhost:$STDB_PORT"
+CLIENT_PORT="${CLIENT_PORT:-5173}"
+LOG_DIR="$REPO/.devhome/logs"
+STDB_LOG="$LOG_DIR/spacetime.log"
+
+log() { printf '\033[1;34m==>\033[0m %s\n' "$*" >&2; }
+die() {
+  printf '\033[1;31merror:\033[0m %s\n' "$*" >&2
+  exit 1
+}
+
+TARGET="${1:-}"
+[ "$TARGET" = "local" ] || die "usage: $0 local [--no-seed] [--clear]"
+shift
+
+SEED=1
+CLEAR=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --no-seed) SEED=0 ;;
+    --clear) CLEAR=1 ;;
+    *) die "unknown option: $1" ;;
+  esac
+  shift
+done
+
+run() { "$REPO/scripts/dev.sh" run "$*"; }
+run_quiet() { "$REPO/scripts/dev.sh" run "$*" >/dev/null 2>&1 || true; }
+
+stdb_up() { curl -sf "$STDB_HOST/v1/ping" >/dev/null 2>&1; }
+
+STARTED_STDB=0
+STARTED_CLIENT=0
+
+# Teardown has to go through the container, by pattern.
+#
+# Killing the local `dev.sh run` pid is not enough: it is a shell that fronts
+# `distrobox enter` -> `podman exec`, and neither forwards a signal to the process on
+# the far side. The first attempt at this left SpacetimeDB and Vite both running after
+# the script had exited, which is worse than not cleaning up at all — the next run
+# finds port 3000 busy and quietly reuses a server it did not start.
+#
+# Both servers are identified by the port they hold, not by a command pattern.
+# distrobox shares the host PID namespace, so `pkill -f vite` inside the container
+# also matches the shell running the pkill and every wrapper above it — including this
+# script. `pkill -x` cannot help either: process names are truncated to 15 characters,
+# so "spacetimedb-standalone" never matches. The port is unambiguous.
+cleanup() {
+  if [ "$STARTED_CLIENT" = 1 ]; then
+    log "stopping the client"
+    run_quiet "fuser -k -TERM $CLIENT_PORT/tcp"
+  fi
+  if [ "$STARTED_STDB" = 1 ]; then
+    log "stopping SpacetimeDB"
+    run_quiet "fuser -k -TERM $STDB_PORT/tcp"
+  fi
+}
+trap cleanup EXIT
+# Ctrl-C on a foreground dev command is how you stop it, not a failure.
+#
+# This relies on the signal reaching the whole foreground process group, which is what
+# a terminal Ctrl-C does. Signalling only this pid would not work: bash defers trap
+# handlers until the current foreground command returns, and that command is the
+# client's dev server, which never returns on its own.
+trap 'exit 0' INT TERM
+
+# --- SpacetimeDB -------------------------------------------------------------
+if stdb_up; then
+  log "SpacetimeDB already running at $STDB_HOST — leaving it alone"
+else
+  mkdir -p "$LOG_DIR"
+  log "starting SpacetimeDB (log: ${STDB_LOG#"$REPO"/})"
+  run "spacetime start --listen-addr 0.0.0.0:$STDB_PORT" >"$STDB_LOG" 2>&1 &
+  STDB_PID=$!
+  STARTED_STDB=1
+
+  for _ in $(seq 1 60); do
+    stdb_up && break
+    # A dead child means the server failed to start; the log says why.
+    kill -0 "$STDB_PID" 2>/dev/null || die "SpacetimeDB exited during startup — see ${STDB_LOG#"$REPO"/}"
+    sleep 1
+  done
+  stdb_up || die "SpacetimeDB did not come up within 60s — see ${STDB_LOG#"$REPO"/}"
+fi
+
+# --- Module ------------------------------------------------------------------
+PUBLISH_FLAGS="--server local --yes"
+# `--yes` with no value means "all", which covers the DESTROY confirmation that
+# --delete-data=always would otherwise stop on.
+[ "$CLEAR" = 1 ] && PUBLISH_FLAGS="$PUBLISH_FLAGS --delete-data=always"
+
+log "publishing module as $DB_NAME"
+run "cd server && spacetime publish $PUBLISH_FLAGS $DB_NAME"
+
+# Bindings are committed, but a schema change with stale bindings produces a client
+# that type-checks against a module that no longer exists. Regenerating here keeps
+# the running pair consistent; `git status` afterwards is the diff to commit.
+log "regenerating client bindings"
+"$REPO/scripts/generate-bindings.sh" >/dev/null
+
+# --- Demo content ------------------------------------------------------------
+if [ "$SEED" = 1 ]; then
+  log "seeding the demo book (idempotent)"
+  run "cd client && npm run --silent seed"
+fi
+
+# --- Client ------------------------------------------------------------------
+log "client on http://localhost:$CLIENT_PORT — Ctrl-C to stop everything"
+STARTED_CLIENT=1
+run "cd client && npm run --silent dev -- --port $CLIENT_PORT --strictPort"

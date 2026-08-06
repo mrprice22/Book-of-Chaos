@@ -121,7 +121,7 @@ by table-driven tests including every degenerate graph shape listed above.
 ## M8 — Deploy & test
 
 - [x] **M8.1** `scripts/seed.ts` — demo book, 5+ chapters, branching graph (diamond + an optional side branch)
-- [ ] **M8.2** `scripts/deploy.sh local` — module published + client served, one command
+- [x] **M8.2** `scripts/deploy.sh local` — module published + client served, one command
 - [ ] **M8.3** Playwright smoke test covering the Definition of Done demo path
 - [ ] **M8.4** `.github/workflows/ci.yml` green on `main`
 - [ ] **M8.5** `docs/testing-runbook.md` — human walkthrough, under 10 minutes
