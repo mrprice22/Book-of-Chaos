@@ -1,0 +1,16 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+  line-height: 1.5;
+}
+
+body {
+  margin: 0;
+}
+
+.app {
+  max-inline-size: 60rem;
+  margin-inline: auto;
+  padding-block: 2rem;
+  padding-inline: 1rem;
+}
