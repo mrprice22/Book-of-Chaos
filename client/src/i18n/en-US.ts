@@ -17,6 +17,8 @@ export const enUS = {
   'book.readTime': 'About {minutes} min read',
   'book.readTime.empty': 'No content yet',
   'chapter.notFound': 'That chapter does not exist.',
+  'chapter.locked': 'This chapter is locked.',
+  'chapter.lockedReason': 'Finish what it depends on first.',
   'chapter.backToBook': 'Back to the book',
   'chapter.empty': 'This chapter has no blocks yet.',
   'chapter.optional': 'Optional',

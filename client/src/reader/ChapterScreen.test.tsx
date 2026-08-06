@@ -34,6 +34,7 @@ describe('ChapterScreen', () => {
     sdk.rows = {
       chapters: [aChapter({ chapterId: 10n, title: 'Attractors' })],
       knowledgeBlocks: [aBlock({ blockId: 100n, chapterId: 10n, title: 'Intro' })],
+      chapterDeps: [],
       readerProgress: [],
     };
   });
@@ -101,6 +102,47 @@ describe('ChapterScreen', () => {
     expect(screen.getByRole('button', { name: /mark as complete/i })).toBeInTheDocument();
   });
 
+  it('locks a blocked chapter reached by direct URL, with no way to complete it', () => {
+    sdk.rows = {
+      chapters: [
+        aChapter({ chapterId: 9n, title: 'Prerequisite' }),
+        aChapter({ chapterId: 10n, title: 'Attractors' }),
+      ],
+      knowledgeBlocks: [
+        aBlock({ blockId: 90n, chapterId: 9n }),
+        aBlock({ blockId: 100n, chapterId: 10n, title: 'Intro' }),
+      ],
+      chapterDeps: [{ depId: 1n, chapterId: 10n, dependsOnChapterId: 9n }],
+      readerProgress: [],
+    };
+    render(<ChapterScreen chapterId={10n} />);
+
+    expect(screen.getByText(/locked/i)).toBeInTheDocument();
+    expect(screen.queryByText('Intro')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /mark as complete/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('opens that same chapter once the prerequisite is finished', () => {
+    sdk.rows = {
+      chapters: [
+        aChapter({ chapterId: 9n, title: 'Prerequisite' }),
+        aChapter({ chapterId: 10n, title: 'Attractors' }),
+      ],
+      knowledgeBlocks: [
+        aBlock({ blockId: 90n, chapterId: 9n }),
+        aBlock({ blockId: 100n, chapterId: 10n, title: 'Intro' }),
+      ],
+      chapterDeps: [{ depId: 1n, chapterId: 10n, dependsOnChapterId: 9n }],
+      readerProgress: [someProgress({ identity: READER, blockId: 90n })],
+    };
+    render(<ChapterScreen chapterId={10n} />);
+
+    expect(screen.getByText('Intro')).toBeInTheDocument();
+    expect(screen.queryByText(/locked/i)).not.toBeInTheDocument();
+  });
+
   it('shows a rejected completion instead of swallowing it', async () => {
     sdk.completeBlock = vi.fn(() => Promise.reject(new Error('Chapter is blocked')));
     render(<ChapterScreen chapterId={10n} />);
@@ -115,5 +157,6 @@ describe('the fake subscription', () => {
     expect(getQueryAccessorName(tables.chapters)).toBe('chapters');
     expect(getQueryAccessorName(tables.knowledgeBlocks)).toBe('knowledgeBlocks');
     expect(getQueryAccessorName(tables.readerProgress)).toBe('readerProgress');
+    expect(getQueryAccessorName(tables.chapterDeps)).toBe('chapterDeps');
   });
 });

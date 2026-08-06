@@ -90,7 +90,7 @@ by table-driven tests including every degenerate graph shape listed above.
 - [x] **M5.1** Book landing page: title, description, chapter count, estimated read time
 - [x] **M5.2** Chapter view: ordered blocks, sanitized HTML render, "Mark as complete"
 - [x] **M5.3** Live subscription — completing a block updates state without a reload
-- [ ] **M5.4** Blocked chapters are visibly locked and unreachable by direct URL
+- [x] **M5.4** Blocked chapters are visibly locked and unreachable by direct URL
 
 **Acceptance:** two browser tabs on the same identity stay in sync with no reload.
 

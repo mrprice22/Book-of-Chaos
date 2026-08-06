@@ -4,29 +4,39 @@ import { reducers, tables } from '../module_bindings';
 import { t } from '../i18n';
 import { HOME_PATH, navigate } from '../routing/route';
 import { ChapterView } from './ChapterView';
+import { buildGraph, chapterState } from './chapterState';
+
+function BackToBook({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="chapter-status">
+      {children}
+      <button type="button" onClick={() => navigate(HOME_PATH)}>
+        {t('chapter.backToBook')}
+      </button>
+    </div>
+  );
+}
 
 /** Live data for one chapter, plus the one write the reader can make. */
 export function ChapterScreen({ chapterId }: { chapterId: bigint }) {
   const { identity } = useSpacetimeDB();
   const [chapters, chaptersReady] = useTable(tables.chapters);
   const [blocks, blocksReady] = useTable(tables.knowledgeBlocks);
+  const [deps, depsReady] = useTable(tables.chapterDeps);
   const [progress] = useTable(tables.readerProgress);
   const completeBlock = useReducer(reducers.completeBlock);
   const [error, setError] = useState<string | undefined>(undefined);
 
-  if (!chaptersReady || !blocksReady) {
+  if (!chaptersReady || !blocksReady || !depsReady) {
     return <p className="chapter-status">{t('book.loading')}</p>;
   }
 
   const chapter = chapters.find((c) => c.chapterId === chapterId);
   if (!chapter) {
     return (
-      <div className="chapter-status">
+      <BackToBook>
         <p>{t('chapter.notFound')}</p>
-        <button type="button" onClick={() => navigate(HOME_PATH)}>
-          {t('chapter.backToBook')}
-        </button>
-      </div>
+      </BackToBook>
     );
   }
 
@@ -38,6 +48,25 @@ export function ChapterScreen({ chapterId }: { chapterId: bigint }) {
       .filter((p) => identity && p.identity.isEqual(identity))
       .map((p) => p.blockId),
   );
+
+  // A direct URL is the only way into a chapter right now, so the lock has to live
+  // on the screen itself rather than on whatever linked here. The server refuses a
+  // Blocked chapter too; this is what makes the refusal legible instead of a toast.
+  const state = chapterState(
+    buildGraph(chapter.bookId, chapters, blocks, deps),
+    completedBlockIds,
+    chapterId,
+  );
+  if (state === 'Blocked') {
+    return (
+      <BackToBook>
+        <p className="locked" data-state="Blocked">
+          {t('chapter.locked')}
+        </p>
+        <p>{t('chapter.lockedReason')}</p>
+      </BackToBook>
+    );
+  }
 
   const onComplete = (blockId: bigint) => {
     setError(undefined);
