@@ -124,7 +124,7 @@ by table-driven tests including every degenerate graph shape listed above.
 - [x] **M8.2** `scripts/deploy.sh local` — module published + client served, one command
 - [x] **M8.3** Playwright smoke test covering the Definition of Done demo path
 - [ ] **M8.4** `.github/workflows/ci.yml` green on `main`
-- [ ] **M8.5** `docs/testing-runbook.md` — human walkthrough, under 10 minutes
+- [x] **M8.5** `docs/testing-runbook.md` — human walkthrough, under 10 minutes
 - [ ] **M8.6** Tag `v0.1.0`
 
 **Acceptance:** every item in the [Definition of Done](./mvp-scope.md#definition-of-done-for-v01) passes.
