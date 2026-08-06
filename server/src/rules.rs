@@ -251,82 +251,11 @@ pub fn next_position(existing: &[u32]) -> u32 {
 // Chapter dependencies
 // ---------------------------------------------------------------------------
 
-/// An edge `(chapter, prerequisite)`: `chapter` stays Blocked until
-/// `prerequisite` is Complete.
-pub type DepEdge = (u64, u64);
-
-/// Returns a cycle in the dependency graph, as the chapters along it, or `None`
-/// if the graph is acyclic.
-///
-/// Iterative depth-first search with an explicit stack. Recursion would be the
-/// shorter code, but a hostile or merely enthusiastic author can nest a graph
-/// deeper than the wasm stack, and a module that traps takes the whole reducer
-/// call with it.
-pub fn find_cycle(edges: &[DepEdge]) -> Option<Vec<u64>> {
-    // 0 = unvisited, 1 = on the current path, 2 = fully explored.
-    let mut state: Vec<(u64, u8)> = Vec::new();
-    let mut nodes: Vec<u64> = Vec::new();
-    for (from, to) in edges {
-        for n in [from, to] {
-            if !nodes.contains(n) {
-                nodes.push(*n);
-                state.push((*n, 0));
-            }
-        }
-    }
-    let mark = |state: &mut Vec<(u64, u8)>, node: u64, value: u8| {
-        if let Some(entry) = state.iter_mut().find(|(n, _)| *n == node) {
-            entry.1 = value;
-        }
-    };
-    let get = |state: &Vec<(u64, u8)>, node: u64| -> u8 {
-        state
-            .iter()
-            .find(|(n, _)| *n == node)
-            .map(|(_, s)| *s)
-            .unwrap_or(0)
-    };
-
-    for start in &nodes {
-        if get(&state, *start) != 0 {
-            continue;
-        }
-        // (node, index of the next outgoing edge to try)
-        let mut stack: Vec<(u64, usize)> = vec![(*start, 0)];
-        mark(&mut state, *start, 1);
-        while let Some((node, edge_index)) = stack.pop() {
-            let next = edges
-                .iter()
-                .filter(|(from, _)| *from == node)
-                .nth(edge_index)
-                .map(|(_, to)| *to);
-            match next {
-                Some(to) => {
-                    stack.push((node, edge_index + 1));
-                    match get(&state, to) {
-                        // `to` is on the current path: everything from it onward
-                        // is the cycle.
-                        1 => {
-                            let mut path: Vec<u64> = stack.iter().map(|(n, _)| *n).collect();
-                            if let Some(start_of_cycle) = path.iter().position(|n| *n == to) {
-                                path.drain(..start_of_cycle);
-                            }
-                            return Some(path);
-                        }
-                        0 => {
-                            mark(&mut state, to, 1);
-                            stack.push((to, 0));
-                        }
-                        _ => {}
-                    }
-                }
-                // Exhausted this node's edges.
-                None => mark(&mut state, node, 2),
-            }
-        }
-    }
-    None
-}
+/// Re-exported so the reducers and this module's callers keep one vocabulary for
+/// an edge. The search itself lives in [`crate::unlock`] — it is the same
+/// traversal the reader-facing engine runs, and two copies would be two chances
+/// to disagree about what a cycle is.
+pub use crate::unlock::{DepEdge, find_cycle};
 
 /// Validates a proposed prerequisite set for one chapter.
 ///
@@ -648,55 +577,8 @@ mod tests {
 
     // --- dependency graph ----------------------------------------------------
 
-    #[test]
-    fn empty_graph_has_no_cycle() {
-        assert_eq!(find_cycle(&[]), None);
-    }
-
-    #[test]
-    fn linear_chain_has_no_cycle() {
-        assert_eq!(find_cycle(&[(3, 2), (2, 1)]), None);
-    }
-
-    #[test]
-    fn diamond_has_no_cycle() {
-        // 4 -> {2,3} -> 1. A node reachable by two paths is not a cycle, and a
-        // DFS that forgets which nodes it has finished will claim it is.
-        assert_eq!(find_cycle(&[(4, 2), (4, 3), (2, 1), (3, 1)]), None);
-    }
-
-    #[test]
-    fn disconnected_islands_have_no_cycle() {
-        assert_eq!(find_cycle(&[(2, 1), (4, 3), (6, 5)]), None);
-    }
-
-    #[test]
-    fn detects_a_self_loop() {
-        let cycle = find_cycle(&[(1, 1)]).expect("self-loop not detected");
-        assert_eq!(cycle, vec![1]);
-    }
-
-    #[test]
-    fn detects_a_two_node_cycle() {
-        let cycle = find_cycle(&[(1, 2), (2, 1)]).expect("2-cycle not detected");
-        assert_eq!(cycle.len(), 2);
-        assert!(cycle.contains(&1) && cycle.contains(&2), "{cycle:?}");
-    }
-
-    #[test]
-    fn detects_a_three_node_cycle() {
-        let cycle = find_cycle(&[(1, 2), (2, 3), (3, 1)]).expect("3-cycle not detected");
-        assert_eq!(cycle.len(), 3);
-        for n in [1, 2, 3] {
-            assert!(cycle.contains(&n), "incomplete cycle: {cycle:?}");
-        }
-    }
-
-    #[test]
-    fn detects_a_cycle_hanging_off_an_acyclic_prefix() {
-        // The search must not stop after exhausting the clean component.
-        assert!(find_cycle(&[(9, 8), (1, 2), (2, 3), (3, 1)]).is_some());
-    }
+    // The cycle search itself is tested in `crate::unlock`; what belongs here is
+    // that `validate_chapter_deps` runs it against the *post-write* graph.
 
     #[test]
     fn accepts_reasonable_prerequisites() {
