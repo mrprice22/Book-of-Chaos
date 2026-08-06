@@ -26,7 +26,7 @@ inside a `distrobox` container so the host stays clean.
 - [x] **M0.1** Write `Containerfile` defining the dev image (Fedora base + build deps)
 - [x] **M0.2** `./scripts/dev.sh setup` creates the `boc-dev` container and installs rustup, Node LTS, and the SpacetimeDB CLI, and is idempotent on re-run
 - [x] **M0.3** `./scripts/dev.sh run <cmd>` executes a command inside the container and forwards the exit code
-- [ ] **M0.4** `./scripts/verify.sh` runs green against the empty repo (every stage SKIPs cleanly)
+- [x] **M0.4** `./scripts/verify.sh` runs green against the empty repo (every stage SKIPs cleanly)
 
 **Acceptance:** on a machine with only `podman` + `distrobox`, a clean clone reaches a
 working `cargo --version`, `node --version`, and `spacetime --version` via one command.
