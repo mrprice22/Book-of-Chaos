@@ -1,9 +1,8 @@
 import { useReducer, useSpacetimeDB, useTable } from 'spacetimedb/react';
 import { t } from '../i18n';
 import { reducers, tables } from '../module_bindings';
-import { inReadingOrder } from '../reader/blockOrder';
 import { AUTHOR_PATH, navigate } from '../routing/route';
-import { BlockForm, type BlockDraft } from './BlockForm';
+import { ChapterEditor } from './ChapterEditor';
 import { ChapterForm } from './ChapterForm';
 import { useAction } from './useAction';
 
@@ -13,15 +12,11 @@ export function AuthorBookScreen({ bookId }: { bookId: bigint }) {
   const [books, booksReady] = useTable(tables.books);
   const [chapters] = useTable(tables.chapters);
   const [blocks] = useTable(tables.knowledgeBlocks);
+  const [deps] = useTable(tables.chapterDeps);
 
   const createChapter = useReducer(reducers.createChapter);
-  const createBlock = useReducer(reducers.createBlock);
-
   const chapterAction = useAction((draft: Parameters<typeof createChapter>[0]) =>
     createChapter(draft),
-  );
-  const blockAction = useAction((draft: Parameters<typeof createBlock>[0]) =>
-    createBlock(draft),
   );
 
   const book = books.find((b) => b.bookId === bookId);
@@ -55,10 +50,6 @@ export function AuthorBookScreen({ bookId }: { bookId: bigint }) {
           : 1,
     );
 
-  const submitBlock = (chapterId: bigint, draft: BlockDraft) => {
-    blockAction.run({ chapterId, ...draft });
-  };
-
   return (
     <section className="author">
       <h2>{book.title}</h2>
@@ -78,22 +69,13 @@ export function AuthorBookScreen({ bookId }: { bookId: bigint }) {
       ) : (
         <ol className="author-chapters">
           {bookChapters.map((chapter) => (
-            <li key={String(chapter.chapterId)}>
-              <h4>{chapter.title}</h4>
-              <ul className="author-blocks">
-                {inReadingOrder(
-                  blocks.filter((b) => b.chapterId === chapter.chapterId),
-                ).map((block) => (
-                  <li key={String(block.blockId)}>{block.title}</li>
-                ))}
-              </ul>
-              <BlockForm
-                chapterId={chapter.chapterId}
-                onSubmit={(draft) => submitBlock(chapter.chapterId, draft)}
-                pending={blockAction.pending}
-                error={blockAction.error}
-              />
-            </li>
+            <ChapterEditor
+              key={String(chapter.chapterId)}
+              chapter={chapter}
+              siblings={bookChapters}
+              blocks={blocks}
+              deps={deps}
+            />
           ))}
         </ol>
       )}

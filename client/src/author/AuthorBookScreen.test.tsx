@@ -11,6 +11,7 @@ const sdk = vi.hoisted(() => ({
   ready: true,
   rows: {} as Record<string, readonly unknown[]>,
   calls: [] as { name: string; args: unknown }[],
+  rejectWith: {} as Record<string, string | undefined>,
 }));
 
 vi.mock('spacetimedb/react', async () => {
@@ -24,17 +25,29 @@ vi.mock('spacetimedb/react', async () => {
     ],
     useReducer: (def: { accessorName: string }) => (args: unknown) => {
       sdk.calls.push({ name: def.accessorName, args });
-      return Promise.resolve();
+      const rejection = sdk.rejectWith[def.accessorName];
+      return rejection === undefined
+        ? Promise.resolve()
+        : Promise.reject(new Error(rejection));
     },
   };
 });
 
 const callTo = (name: string) => sdk.calls.filter((c) => c.name === name);
 
+/** The nth chapter's "Save prerequisites" button — one per chapter, in list order. */
+function savePrerequisitesFor(index: number): HTMLElement {
+  const buttons = screen.getAllByRole('button', { name: 'Save prerequisites' });
+  const button = buttons[index];
+  if (!button) throw new Error(`no prerequisite form at index ${index}`);
+  return button;
+}
+
 describe('AuthorBookScreen', () => {
   beforeEach(() => {
     sdk.ready = true;
     sdk.calls = [];
+    sdk.rejectWith = {};
     sdk.rows = {
       books: [aBook({ bookId: 1n, title: 'Chaos', owner: ME })],
       chapters: [],
@@ -130,5 +143,63 @@ describe('AuthorBookScreen', () => {
     const later = blocks.findIndex((text) => text === 'Later');
     expect(earlier).toBeGreaterThanOrEqual(0);
     expect(earlier).toBeLessThan(later);
+  });
+});
+
+describe('AuthorBookScreen prerequisites', () => {
+  beforeEach(() => {
+    sdk.ready = true;
+    sdk.calls = [];
+    sdk.rejectWith = {};
+    sdk.rows = {
+      books: [aBook({ bookId: 1n, title: 'Chaos', owner: ME })],
+      chapters: [
+        aChapter({ chapterId: 10n, bookId: 1n, title: 'First', position: 0 }),
+        aChapter({ chapterId: 11n, bookId: 1n, title: 'Second', position: 1 }),
+      ],
+      knowledgeBlocks: [],
+      chapterDeps: [],
+    };
+  });
+
+  it('sets prerequisites for the chapter whose form was used', async () => {
+    render(<AuthorBookScreen bookId={1n} />);
+
+    await userEvent.click(screen.getByLabelText('First', { selector: '#prereq-11-10' }));
+    await userEvent.click(savePrerequisitesFor(1));
+
+    expect(callTo('setChapterDeps')[0]?.args).toEqual({
+      chapterId: 11n,
+      dependsOnChapterIds: [10n],
+    });
+  });
+
+  it('shows a cycle rejection under the chapter that caused it, and only there', async () => {
+    sdk.rejectWith = {
+      setChapterDeps: 'That would create a cycle: Second → First → Second',
+    };
+    sdk.rows = {
+      ...sdk.rows,
+      chapterDeps: [{ depId: 1n, chapterId: 10n, dependsOnChapterId: 11n }],
+    };
+    render(<AuthorBookScreen bookId={1n} />);
+
+    await userEvent.click(screen.getByLabelText('First', { selector: '#prereq-11-10' }));
+    await userEvent.click(savePrerequisitesFor(1));
+
+    const alerts = await screen.findAllByRole('alert');
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toHaveTextContent(
+      'That would create a cycle: Second → First → Second',
+    );
+  });
+
+  it('reflects the stored edges rather than a stale local draft', () => {
+    sdk.rows = {
+      ...sdk.rows,
+      chapterDeps: [{ depId: 1n, chapterId: 11n, dependsOnChapterId: 10n }],
+    };
+    render(<AuthorBookScreen bookId={1n} />);
+    expect(screen.getByLabelText('First', { selector: '#prereq-11-10' })).toBeChecked();
   });
 });
