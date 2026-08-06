@@ -1,6 +1,8 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { SpacetimeDBProvider } from 'spacetimedb/react';
 import { App } from './App';
+import { buildConnection } from './spacetime/connect';
 import './index.css';
 
 const root = document.getElementById('root');
@@ -12,6 +14,8 @@ if (!root) {
 
 createRoot(root).render(
   <StrictMode>
-    <App />
+    <SpacetimeDBProvider connectionBuilder={buildConnection()}>
+      <App />
+    </SpacetimeDBProvider>
   </StrictMode>,
 );

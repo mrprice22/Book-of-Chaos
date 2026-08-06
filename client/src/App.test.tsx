@@ -1,32 +1,51 @@
-import { act, render, screen } from '@testing-library/react';
-import type { DbConnection } from './module_bindings';
-import type { ConnectionHandlers, Connector } from './spacetime/connect';
+import { render, screen } from '@testing-library/react';
+import { Identity } from 'spacetimedb';
 import { App } from './App';
 
+// `spacetimedb/react` does not export its context, so the SDK's hook is the seam.
+// Everything below it — App, useConnectionStatus, t() — is the real thing.
+const sdk = vi.hoisted(() => ({
+  state: {
+    isActive: false,
+    identity: undefined as Identity | undefined,
+    connectionError: undefined as Error | undefined,
+  },
+}));
+
+vi.mock('spacetimedb/react', () => ({
+  useSpacetimeDB: () => sdk.state,
+}));
+
+const IDENTITY = 'c0ffee'.padStart(64, '0');
+
 describe('App', () => {
-  it('renders the application shell', () => {
-    render(<App connector={() => ({ disconnect: () => {} })} />);
-    expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
+  beforeEach(() => {
+    sdk.state = { isActive: false, identity: undefined, connectionError: undefined };
   });
 
-  it('shows the connected identity once the connection lands', () => {
-    let handlers: ConnectionHandlers | undefined;
-    const connector: Connector = (_token, h) => {
-      handlers = h;
-      return { disconnect: () => {} };
-    };
-
-    render(<App connector={connector} />);
+  it('reports that it is connecting before the handshake completes', () => {
+    render(<App />);
+    expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
     expect(screen.getByText(/connecting/i)).toBeInTheDocument();
+  });
 
-    act(() => {
-      handlers?.onConnect(
-        { disconnect: () => {} } as unknown as DbConnection,
-        'c0ffee',
-        'tok-new',
-      );
-    });
+  it('shows the identity once connected', () => {
+    sdk.state = {
+      isActive: true,
+      identity: Identity.fromString(IDENTITY),
+      connectionError: undefined,
+    };
+    render(<App />);
+    expect(screen.getByText(IDENTITY)).toBeInTheDocument();
+  });
 
-    expect(screen.getByText('c0ffee')).toBeInTheDocument();
+  it('tells the reader it is retrying after a drop', () => {
+    sdk.state = {
+      isActive: false,
+      identity: undefined,
+      connectionError: new Error('socket closed'),
+    };
+    render(<App />);
+    expect(screen.getByText(/retrying/i)).toBeInTheDocument();
   });
 });

@@ -1,46 +1,21 @@
-import { DbConnection } from '../module_bindings';
+import { DbConnection, type DbConnectionBuilder } from '../module_bindings';
 import { SPACETIME_DB_NAME, SPACETIME_URI } from './config';
-
-export type ConnectionHandlers = {
-  onConnect: (conn: DbConnection, identityHex: string, token: string) => void;
-  onDisconnect: (error?: Error) => void;
-  onConnectError: (error: Error) => void;
-};
-
-export type ConnectionHandle = {
-  disconnect: () => void;
-};
+import { loadToken, saveToken } from './token';
 
 /**
- * Opens a connection and hands back only what the caller needs to close it.
+ * The connection the app runs on, configured but not yet opened.
  *
- * `useConnection` takes this as a parameter rather than importing it, so the hook's
- * reconnect behaviour can be tested without a websocket or a running database.
+ * `SpacetimeDBProvider` owns the opening, the ref-counted teardown and the
+ * reconnect backoff. All this adds is identity persistence: the stored token goes
+ * out with the handshake and the token that comes back is written down, which is
+ * what makes a returning reader the *same* reader rather than a new anonymous one.
  */
-export type Connector = (
-  token: string | undefined,
-  handlers: ConnectionHandlers,
-) => ConnectionHandle;
-
-export const connectToSpacetime: Connector = (token, handlers) => {
-  const conn = DbConnection.builder()
+export function buildConnection(): DbConnectionBuilder {
+  return DbConnection.builder()
     .withUri(SPACETIME_URI)
     .withDatabaseName(SPACETIME_DB_NAME)
-    .withToken(token)
-    .onConnect((connection, identity, newToken) => {
-      handlers.onConnect(connection, identity.toHexString(), newToken);
-    })
-    .onDisconnect((_ctx, error) => {
-      handlers.onDisconnect(error);
-    })
-    .onConnectError((_ctx, error) => {
-      handlers.onConnectError(error);
-    })
-    .build();
-
-  return {
-    disconnect: () => {
-      conn.disconnect();
-    },
-  };
-};
+    .withToken(loadToken())
+    .onConnect((_conn, _identity, token) => {
+      saveToken(token);
+    });
+}

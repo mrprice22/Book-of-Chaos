@@ -1,11 +1,8 @@
 import { t } from './i18n';
-import { useConnection } from './spacetime/useConnection';
-import type { Connector } from './spacetime/connect';
+import { useConnectionStatus } from './spacetime/useConnectionStatus';
 
-// The connector is injectable so tests can drive the connection state machine
-// without a websocket. Production never passes it.
-export function App({ connector }: { connector?: Connector }) {
-  const status = useConnection(connector);
+export function App() {
+  const status = useConnectionStatus();
 
   return (
     <main className="app">
