@@ -524,4 +524,185 @@ mod tests {
         assert_eq!(chapter_state(&graph, &progress, 1), ChapterState::Blocked);
         assert_eq!(chapter_state(&graph, &progress, 2), ChapterState::Blocked);
     }
+
+    // --- graph shapes, table-driven -----------------------------------------
+    //
+    // The tests above pin down one decision each. This table pins down the
+    // *shapes*: the degenerate graphs that break traversals. Every case asserts
+    // the state of every chapter, not just the interesting one, because the
+    // common failure here is a chapter that changes state when nothing about it
+    // did. Failures are collected and reported together — one broken traversal
+    // usually breaks several cases, and seeing all of them names the cause.
+
+    struct Case {
+        shape: &'static str,
+        chapters: Vec<ChapterNode>,
+        completed: Vec<BlockId>,
+        expect: &'static [(ChapterId, ChapterState)],
+    }
+
+    fn optional(mut c: ChapterNode) -> ChapterNode {
+        c.is_optional = true;
+        c
+    }
+
+    fn pinned(mut c: ChapterNode) -> ChapterNode {
+        c.is_pinned = true;
+        c
+    }
+
+    /// A chapter whose single block is optional, so it has nothing required.
+    fn all_optional(chapter_id: ChapterId) -> ChapterNode {
+        let mut c = chapter(chapter_id, &[], 1);
+        c.blocks[0].is_optional = true;
+        c
+    }
+
+    fn cases() -> Vec<Case> {
+        use ChapterState::{Available, Blocked, Complete, InProgress};
+        vec![
+            Case {
+                shape: "empty graph",
+                chapters: vec![],
+                completed: vec![],
+                expect: &[(1, Blocked)],
+            },
+            Case {
+                shape: "linear chain, untouched",
+                chapters: vec![chapter(1, &[], 1), chapter(2, &[1], 1), chapter(3, &[2], 1)],
+                completed: vec![],
+                expect: &[(1, Available), (2, Blocked), (3, Blocked)],
+            },
+            Case {
+                shape: "linear chain, first done",
+                chapters: vec![chapter(1, &[], 1), chapter(2, &[1], 1), chapter(3, &[2], 1)],
+                completed: vec![100],
+                expect: &[(1, Complete), (2, Available), (3, Blocked)],
+            },
+            Case {
+                shape: "linear chain, finished",
+                chapters: vec![chapter(1, &[], 1), chapter(2, &[1], 1), chapter(3, &[2], 1)],
+                completed: vec![100, 200, 300],
+                expect: &[(1, Complete), (2, Complete), (3, Complete)],
+            },
+            Case {
+                shape: "diamond, one arm done",
+                chapters: vec![
+                    chapter(1, &[], 1),
+                    chapter(2, &[1], 1),
+                    chapter(3, &[1], 1),
+                    chapter(4, &[2, 3], 1),
+                ],
+                completed: vec![100, 200],
+                // The join waits for both arms; the arm reachable twice is not
+                // confused by being visited twice.
+                expect: &[(1, Complete), (2, Complete), (3, Available), (4, Blocked)],
+            },
+            Case {
+                shape: "diamond, both arms done",
+                chapters: vec![
+                    chapter(1, &[], 1),
+                    chapter(2, &[1], 1),
+                    chapter(3, &[1], 1),
+                    chapter(4, &[2, 3], 1),
+                ],
+                completed: vec![100, 200, 300],
+                expect: &[(1, Complete), (2, Complete), (3, Complete), (4, Available)],
+            },
+            Case {
+                shape: "disconnected islands",
+                chapters: vec![
+                    chapter(1, &[], 1),
+                    chapter(2, &[1], 1),
+                    chapter(3, &[], 1),
+                    chapter(4, &[3], 1),
+                ],
+                completed: vec![100],
+                // Progress on one island must not move the other.
+                expect: &[(1, Complete), (2, Available), (3, Available), (4, Blocked)],
+            },
+            Case {
+                shape: "optional chapter as a prerequisite",
+                chapters: vec![
+                    chapter(1, &[], 1),
+                    optional(chapter(2, &[1], 1)),
+                    chapter(3, &[2], 1),
+                ],
+                completed: vec![100],
+                // Optional means "does not count toward finishing the book", not
+                // "can be skipped as a prerequisite". An author who wants it
+                // skippable does not draw the edge.
+                expect: &[(1, Complete), (2, Available), (3, Blocked)],
+            },
+            Case {
+                shape: "chapter with only optional blocks",
+                chapters: vec![all_optional(1), chapter(2, &[1], 1)],
+                completed: vec![],
+                // Nothing required, so nothing downstream waits forever.
+                expect: &[(1, Complete), (2, Available)],
+            },
+            Case {
+                shape: "pinned chapter behind an unmet prerequisite",
+                chapters: vec![chapter(1, &[], 1), pinned(chapter(2, &[1], 2))],
+                completed: vec![200],
+                // A glossary is reachable from the start and still tracks reading.
+                expect: &[(1, Available), (2, InProgress)],
+            },
+            Case {
+                shape: "self-cycle",
+                chapters: vec![chapter(1, &[1], 1), chapter(2, &[], 1)],
+                completed: vec![],
+                expect: &[(1, Blocked), (2, Available)],
+            },
+            Case {
+                shape: "three-node cycle",
+                chapters: vec![
+                    chapter(1, &[3], 1),
+                    chapter(2, &[1], 1),
+                    chapter(3, &[2], 1),
+                ],
+                completed: vec![],
+                // Every chapter on a loop is unreachable, and the engine says so
+                // instead of recursing forever. This is why the write path
+                // rejects cycles.
+                expect: &[(1, Blocked), (2, Blocked), (3, Blocked)],
+            },
+        ]
+    }
+
+    #[test]
+    fn every_graph_shape_yields_the_expected_states() {
+        let mut failures: Vec<String> = Vec::new();
+        for case in cases() {
+            let graph = Graph::new(case.chapters);
+            let progress = Progress::from_completed_blocks(case.completed);
+            for (chapter_id, expected) in case.expect {
+                let actual = chapter_state(&graph, &progress, *chapter_id);
+                if actual != *expected {
+                    failures.push(format!(
+                        "{}: chapter {chapter_id} is {actual:?}, expected {expected:?}",
+                        case.shape
+                    ));
+                }
+            }
+        }
+        assert!(failures.is_empty(), "\n{}", failures.join("\n"));
+    }
+
+    #[test]
+    fn every_graph_shape_agrees_with_detect_cycle() {
+        // The same table, read for the other property: exactly the two cyclic
+        // shapes are cyclic. A traversal that reports a diamond as a cycle would
+        // make the author-side rejection message a lie.
+        let cyclic = ["self-cycle", "three-node cycle"];
+        let mut failures: Vec<String> = Vec::new();
+        for case in cases() {
+            let expected = cyclic.contains(&case.shape);
+            let found = detect_cycle(&Graph::new(case.chapters));
+            if found.is_some() != expected {
+                failures.push(format!("{}: detect_cycle returned {found:?}", case.shape));
+            }
+        }
+        assert!(failures.is_empty(), "\n{}", failures.join("\n"));
+    }
 }

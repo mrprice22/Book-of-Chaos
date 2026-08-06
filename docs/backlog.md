@@ -66,7 +66,7 @@ testable, then call it from reducers.
 - [x] **M3.1** `unlock::chapter_state(graph, progress, chapter_id) -> ChapterState`
 - [x] **M3.2** `unlock::detect_cycle(graph) -> Option<Vec<ChapterId>>`
 - [x] **M3.3** `complete_block` reducer — idempotent, writes `reader_progress`, recomputes affected chapter states
-- [ ] **M3.4** Table-driven tests: linear chain, diamond, disconnected islands, optional chapters, pinned chapters, self-cycle, 3-node cycle, empty graph
+- [x] **M3.4** Table-driven tests: linear chain, diamond, disconnected islands, optional chapters, pinned chapters, self-cycle, 3-node cycle, empty graph
 
 **Acceptance:** unlock logic has no SpacetimeDB dependency in its signature and is covered
 by table-driven tests including every degenerate graph shape listed above.
