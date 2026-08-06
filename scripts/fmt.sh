@@ -29,6 +29,11 @@ fi
 
 if [ -f client/package.json ]; then
   run "cd client && npx prettier --write 'src/**/*.{ts,tsx,css}' --log-level warn"
+  # scripts/*.ts run on the client's toolchain but live outside it; prettier is
+  # invoked from client/ because that is where the config and the binary are.
+  if compgen -G "scripts/*.ts" >/dev/null; then
+    run "cd client && npx prettier --write '../scripts/*.ts' --log-level warn"
+  fi
 fi
 
 exit 0

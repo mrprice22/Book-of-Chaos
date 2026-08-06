@@ -1,0 +1,11 @@
+{
+  // scripts/seed.ts lives outside client/, but it imports the generated bindings and
+  // runs on the client's toolchain, so this is where it can be type-checked. The main
+  // tsconfig deliberately does not reach outside src/ — a stray parent-relative
+  // include there would pull repo files into the app build graph.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["../scripts/**/*.ts"]
+}

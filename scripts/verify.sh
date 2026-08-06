@@ -117,6 +117,12 @@ stage "ts-lint"       "client/package.json" "cd client && npm run --silent lint"
 stage "ts-test"       "client/package.json" "cd client && npm run --silent test -- --run"
 stage "client-build"  "client/package.json" "cd client && npm run --silent build"
 
+# --- Repo scripts written in TypeScript -------------------------------------
+# scripts/seed.ts imports the generated bindings, so it is checked with the client's
+# toolchain. ESLint cannot reach it (flat config refuses files outside its base path),
+# so tsc is the gate here — which is what catches a binding that changed shape.
+stage "seed-typecheck" "scripts/seed.ts" "cd client && npx tsc --noEmit -p tsconfig.seed.json"
+
 # --- End to end -------------------------------------------------------------
 stage "e2e-smoke"     "client/e2e" "cd client && npm run --silent test:e2e"
 
