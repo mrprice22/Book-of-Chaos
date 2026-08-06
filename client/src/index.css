@@ -8,6 +8,19 @@ body {
   margin: 0;
 }
 
+.book-facts {
+  display: flex;
+  gap: 1rem;
+  padding-inline-start: 0;
+  list-style: none;
+  opacity: 0.75;
+}
+
+.connection {
+  font-size: 0.875rem;
+  opacity: 0.75;
+}
+
 .app {
   max-inline-size: 60rem;
   margin-inline: auto;

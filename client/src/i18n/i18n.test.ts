@@ -51,6 +51,11 @@ describe('the bare-JSX-literal lint rule', () => {
     ).toContain('no-restricted-syntax');
   });
 
+  it('allows a component prop that happens to be called title', async () => {
+    const code = 'export const A = () => <BookLanding title="Chaos" />;\n';
+    expect(await lint(code)).not.toContain('no-restricted-syntax');
+  });
+
   it('accepts copy routed through t()', async () => {
     const code =
       "import { t } from './i18n';\nexport const A = () => <p>{t('app.title')}</p>;\n";

@@ -10,4 +10,10 @@ export const enUS = {
   'connection.connecting': 'Connecting…',
   'connection.reconnecting': 'Connection lost — retrying…',
   'connection.connectedAs': 'Connected as',
+  'book.loading': 'Loading the library…',
+  'book.none': 'No book has been published yet.',
+  'book.chapterCount.one': '1 chapter',
+  'book.chapterCount.other': '{count} chapters',
+  'book.readTime': 'About {minutes} min read',
+  'book.readTime.empty': 'No content yet',
 } as const;

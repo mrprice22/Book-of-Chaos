@@ -1,4 +1,5 @@
 import { t } from './i18n';
+import { Library } from './reader/Library';
 import { useConnectionStatus } from './spacetime/useConnectionStatus';
 
 export function App() {
@@ -20,6 +21,7 @@ export function App() {
           </span>
         )}
       </p>
+      {status.kind === 'connected' && <Library />}
     </main>
   );
 }

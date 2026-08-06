@@ -36,8 +36,11 @@ export default tseslint.config(
           message: 'User-facing text belongs in src/i18n/en-US.ts — render it with t().',
         },
         {
+          // Only on host elements (lowercase names). `title` on a component is a
+          // prop carrying data — `<BookLanding title={...} />` — not copy the
+          // browser will render.
           selector:
-            'JSXAttribute[name.name=/^(title|alt|placeholder|aria-label|aria-description)$/] > Literal',
+            'JSXOpeningElement[name.name=/^[a-z]/] > JSXAttribute[name.name=/^(title|alt|placeholder|aria-label|aria-description)$/] > Literal',
           message:
             'User-facing attribute text belongs in src/i18n/en-US.ts — pass t() instead.',
         },

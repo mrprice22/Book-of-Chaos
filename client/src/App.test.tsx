@@ -14,6 +14,9 @@ const sdk = vi.hoisted(() => ({
 
 vi.mock('spacetimedb/react', () => ({
   useSpacetimeDB: () => sdk.state,
+  // App's concern is the connection banner; Library has its own tests, so here it
+  // subscribes to an empty, settled database.
+  useTable: () => [[], true],
 }));
 
 const IDENTITY = 'c0ffee'.padStart(64, '0');
