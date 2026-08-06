@@ -7,6 +7,7 @@
 //! Domain reducers arrive in M2 and the unlock engine in M3.
 
 pub mod rules;
+pub mod sanitize;
 
 use spacetimedb::{Identity, ReducerContext, SpacetimeType, Table, Timestamp};
 
@@ -374,4 +375,156 @@ fn find_chapter(ctx: &ReducerContext, chapter_id: u64) -> Result<Chapter, String
         .chapter_id()
         .find(chapter_id)
         .ok_or_else(|| "That chapter no longer exists.".to_string())
+}
+
+// ---------------------------------------------------------------------------
+// Block reducers
+// ---------------------------------------------------------------------------
+
+/// Add a block to a chapter. Body HTML is sanitized here, on write — the stored
+/// string is what every reader renders, so nothing downstream has to remember to
+/// clean it again.
+///
+/// Position is server-assigned (append), for the same reason as `create_chapter`.
+#[spacetimedb::reducer]
+pub fn create_block(
+    ctx: &ReducerContext,
+    chapter_id: u64,
+    title: String,
+    block_type: BlockType,
+    body_html: String,
+    url: Option<String>,
+    is_optional: bool,
+) -> Result<(), String> {
+    let chapter = find_chapter(ctx, chapter_id)?;
+    let book = find_book(ctx, chapter.book_id)?;
+    let is_resource_link = block_type == BlockType::ResourceLink;
+    rules::can_write_block(
+        book.owner == ctx.sender(),
+        &title,
+        &body_html,
+        is_resource_link,
+        url.as_deref(),
+    )?;
+
+    let next_position = ctx
+        .db
+        .knowledge_blocks()
+        .chapter_id()
+        .filter(chapter_id)
+        .map(|b| b.position + 1)
+        .max()
+        .unwrap_or(0);
+
+    ctx.db.knowledge_blocks().insert(KnowledgeBlock {
+        block_id: 0, // assigned by #[auto_inc]
+        chapter_id,
+        title: title.trim().to_string(),
+        block_type,
+        body_html: sanitize::sanitize_html(&body_html),
+        url: normalize_block_url(is_resource_link, url),
+        position: next_position,
+        is_optional,
+        locale: None,
+        created_at: ctx.timestamp,
+        updated_at: ctx.timestamp,
+    });
+    Ok(())
+}
+
+/// Edit a block. The body is re-sanitized rather than trusted, because the
+/// client's copy came from a subscription and could have been altered in transit
+/// or by a hostile client.
+#[spacetimedb::reducer]
+pub fn update_block(
+    ctx: &ReducerContext,
+    block_id: u64,
+    title: String,
+    block_type: BlockType,
+    body_html: String,
+    url: Option<String>,
+    is_optional: bool,
+) -> Result<(), String> {
+    let block = find_block(ctx, block_id)?;
+    let chapter = find_chapter(ctx, block.chapter_id)?;
+    let book = find_book(ctx, chapter.book_id)?;
+    let is_resource_link = block_type == BlockType::ResourceLink;
+    rules::can_write_block(
+        book.owner == ctx.sender(),
+        &title,
+        &body_html,
+        is_resource_link,
+        url.as_deref(),
+    )?;
+
+    ctx.db.knowledge_blocks().block_id().update(KnowledgeBlock {
+        title: title.trim().to_string(),
+        block_type,
+        body_html: sanitize::sanitize_html(&body_html),
+        url: normalize_block_url(is_resource_link, url),
+        is_optional,
+        updated_at: ctx.timestamp,
+        ..block
+    });
+    Ok(())
+}
+
+/// Remove a block and close the gap it leaves in the chapter's ordering.
+///
+/// Reader progress rows that reference the block are deleted with it. Leaving
+/// them would let a deleted block keep counting toward chapter completion, which
+/// the unlock engine (M3) would read as progress the reader never made.
+#[spacetimedb::reducer]
+pub fn delete_block(ctx: &ReducerContext, block_id: u64) -> Result<(), String> {
+    let block = find_block(ctx, block_id)?;
+    let chapter = find_chapter(ctx, block.chapter_id)?;
+    let book = find_book(ctx, chapter.book_id)?;
+    rules::require_owner(book.owner == ctx.sender())?;
+
+    let chapter_id = block.chapter_id;
+    let removed_position = block.position;
+    ctx.db.knowledge_blocks().block_id().delete(block_id);
+
+    for progress in ctx.db.reader_progress().block_id().filter(block_id) {
+        ctx.db
+            .reader_progress()
+            .progress_id()
+            .delete(progress.progress_id);
+    }
+
+    // Positions stay contiguous so `position` remains a usable sort key and the
+    // next append does not reuse a number.
+    let after: Vec<KnowledgeBlock> = ctx
+        .db
+        .knowledge_blocks()
+        .chapter_id()
+        .filter(chapter_id)
+        .filter(|b| b.position > removed_position)
+        .collect();
+    for b in after {
+        ctx.db.knowledge_blocks().block_id().update(KnowledgeBlock {
+            position: b.position - 1,
+            updated_at: ctx.timestamp,
+            ..b
+        });
+    }
+    Ok(())
+}
+
+/// A `Reading` block has no URL of its own. Dropping a stray value here rather
+/// than rejecting it keeps `validate_block_url` permissive for the case that is
+/// a client bug, not an attack — see the rule's comment.
+fn normalize_block_url(is_resource_link: bool, url: Option<String>) -> Option<String> {
+    if !is_resource_link {
+        return None;
+    }
+    url.map(|u| u.trim().to_string()).filter(|u| !u.is_empty())
+}
+
+fn find_block(ctx: &ReducerContext, block_id: u64) -> Result<KnowledgeBlock, String> {
+    ctx.db
+        .knowledge_blocks()
+        .block_id()
+        .find(block_id)
+        .ok_or_else(|| "That block no longer exists.".to_string())
 }

@@ -10,3 +10,4 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 spacetimedb = "2.8.*"
 log = "0.4"
+ammonia = "4"

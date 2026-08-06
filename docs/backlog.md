@@ -49,7 +49,7 @@ working `cargo --version`, `node --version`, and `spacetime --version` via one c
 - [x] **M2.1** `claim_username` — unique, immutable, rejects re-claim and duplicates
 - [x] **M2.2** `create_book` / `update_book` / `publish_book` — caller becomes Owner; non-owners rejected
 - [x] **M2.3** `create_chapter` / `update_chapter` / `reorder_chapters`
-- [ ] **M2.4** `create_block` / `update_block` / `delete_block` — HTML body sanitized server-side
+- [x] **M2.4** `create_block` / `update_block` / `delete_block` — HTML body sanitized server-side
 - [ ] **M2.5** `set_chapter_deps` — rejects self-reference, missing chapters, and cycles
 - [ ] **M2.6** Unit tests for every rejection path above
 

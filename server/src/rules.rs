@@ -166,6 +166,63 @@ pub fn validate_chapter_order(existing: &[u64], requested: &[u64]) -> Result<(),
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Blocks
+// ---------------------------------------------------------------------------
+
+pub const BODY_MAX: usize = 200_000;
+
+/// Whether a block's `url` field is required, forbidden, or ignored.
+///
+/// Passed in as a bool rather than taking `BlockType` so this module stays free
+/// of SpacetimeDB-derived types, per CLAUDE.md.
+pub fn validate_block_url(is_resource_link: bool, url: Option<&str>) -> Result<(), String> {
+    let url = url.map(str::trim).filter(|u| !u.is_empty());
+    match (is_resource_link, url) {
+        (true, None) => Err("A resource link needs a URL.".to_string()),
+        (true, Some(u)) => {
+            // Scheme check only. The sanitizer owns URLs inside body HTML; this
+            // field is rendered as an href of its own and needs the same rule.
+            if u.starts_with("http://") || u.starts_with("https://") {
+                Ok(())
+            } else {
+                Err("Links must start with http:// or https://.".to_string())
+            }
+        }
+        // A reading block with a stray URL is a client bug, not an attack: the
+        // reducer drops the value rather than failing an author who cannot see
+        // the field.
+        (false, _) => Ok(()),
+    }
+}
+
+/// Body length is checked *before* sanitizing, on the raw input: the limit exists
+/// to bound work, and a megabyte of nested tags that sanitizes down to nothing
+/// has already cost the parse.
+pub fn validate_body(body_html: &str) -> Result<(), String> {
+    if body_html.chars().count() > BODY_MAX {
+        return Err(format!(
+            "Block content can be at most {BODY_MAX} characters."
+        ));
+    }
+    Ok(())
+}
+
+/// Authorization first, then inputs — same order as the book and chapter rules.
+pub fn can_write_block(
+    is_owner: bool,
+    title: &str,
+    body_html: &str,
+    is_resource_link: bool,
+    url: Option<&str>,
+) -> Result<(), String> {
+    require_owner(is_owner)?;
+    validate_title(title)?;
+    validate_body(body_html)?;
+    validate_block_url(is_resource_link, url)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -346,5 +403,62 @@ mod tests {
         // Same length check from the other side: duplicates are caught first, so a
         // longer list can only mean a foreign id.
         assert!(validate_chapter_order(&[1, 2], &[1, 2, 3]).is_err());
+    }
+
+    // --- blocks --------------------------------------------------------------
+
+    #[test]
+    fn accepts_a_reading_block() {
+        assert!(can_write_block(true, "Intro", "<p>hello</p>", false, None).is_ok());
+    }
+
+    #[test]
+    fn accepts_a_resource_link_with_an_http_url() {
+        assert!(can_write_block(true, "Docs", "", true, Some("https://example.com")).is_ok());
+        assert!(can_write_block(true, "Docs", "", true, Some("http://example.com")).is_ok());
+    }
+
+    #[test]
+    fn block_non_owner_is_rejected_before_validation() {
+        let err = can_write_block(false, "", "", true, None).unwrap_err();
+        assert!(
+            err.contains("owner"),
+            "leaked validation to a non-owner: {err}"
+        );
+    }
+
+    #[test]
+    fn resource_link_requires_a_url() {
+        assert!(validate_block_url(true, None).is_err());
+        assert!(validate_block_url(true, Some("")).is_err());
+        assert!(validate_block_url(true, Some("   ")).is_err());
+    }
+
+    #[test]
+    fn resource_link_rejects_dangerous_schemes() {
+        for hostile in [
+            "javascript:alert(1)",
+            "data:text/html,<script>x</script>",
+            "file:///etc/passwd",
+            "ftp://example.com",
+            "//example.com",
+        ] {
+            assert!(
+                validate_block_url(true, Some(hostile)).is_err(),
+                "accepted a dangerous URL: {hostile}"
+            );
+        }
+    }
+
+    #[test]
+    fn reading_block_tolerates_a_stray_url() {
+        assert!(validate_block_url(false, Some("anything")).is_ok());
+        assert!(validate_block_url(false, None).is_ok());
+    }
+
+    #[test]
+    fn rejects_an_overlong_body() {
+        assert!(validate_body(&"a".repeat(BODY_MAX)).is_ok());
+        assert!(validate_body(&"a".repeat(BODY_MAX + 1)).is_err());
     }
 }
