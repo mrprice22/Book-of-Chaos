@@ -46,6 +46,21 @@ if ! command -v spacetime >/dev/null 2>&1; then
   curl -sSf https://install.spacetimedb.com | sh -s -- --yes
 fi
 
+# --- Playwright browser dependencies ----------------------------------------
+# The browser binary itself is installed by the client (`npx playwright install
+# chromium`, cached in ~/.cache/ms-playwright). What cannot come from npm is the set
+# of shared libraries chrome-headless-shell links against — without them it exits
+# immediately with "libnspr4.so: cannot open shared object file".
+#
+# `playwright install --with-deps` only knows apt, so Fedora is handled by name here.
+if command -v dnf >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1; then
+  log "installing browser runtime libraries (dnf)"
+  sudo dnf -y install --setopt=install_weak_deps=False \
+    nspr nss nss-util atk at-spi2-atk at-spi2-core cups-libs libdrm \
+    libxkbcommon libXcomposite libXdamage libXfixes libXrandr libXext libXi \
+    mesa-libgbm pango cairo alsa-lib libxshmfence >/dev/null
+fi
+
 # --- Shell wiring -----------------------------------------------------------
 # Explicit env file rather than login-shell semantics. Sourcing ~/.bashrc from a
 # non-interactive shell is unreliable (Ubuntu's early-returns when not interactive,

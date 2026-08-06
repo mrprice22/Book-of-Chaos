@@ -9,5 +9,9 @@ export default defineConfig({
     globals: true,
     environment: 'jsdom',
     setupFiles: ['./src/test-setup.ts'],
+    // Unit tests only. Vitest's default pattern also matches e2e/*.spec.ts, which is
+    // Playwright's — those need a browser and a running stack, and fail instantly
+    // under jsdom.
+    include: ['src/**/*.test.{ts,tsx}'],
   },
 });

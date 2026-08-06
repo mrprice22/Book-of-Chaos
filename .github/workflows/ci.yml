@@ -43,12 +43,20 @@ jobs:
           path: |
             server/target
             client/node_modules
+            ~/.cache/ms-playwright
           key: build-${{ runner.os }}-${{ hashFiles('server/Cargo.lock', 'client/package-lock.json') }}
           restore-keys: build-${{ runner.os }}-
 
       - name: Install client dependencies
         if: hashFiles('client/package-lock.json') != ''
         run: bash -c '. "$HOME/.boc-env"; cd client && npm ci'
+
+      # The browser binary comes from npm; the shared libraries it links against do
+      # not. --with-deps handles both on the apt-based runner (install-toolchain.sh
+      # covers the Fedora dev container, which --with-deps does not support).
+      - name: Install Playwright browser
+        if: hashFiles('client/e2e/**') != ''
+        run: bash -c '. "$HOME/.boc-env"; cd client && npx playwright install --with-deps chromium'
 
       - name: Verify
         run: ./scripts/verify.sh

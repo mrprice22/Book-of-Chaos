@@ -105,6 +105,20 @@ describe('clicking a node', () => {
     expect(window.location.pathname).toBe('/');
   });
 
+  it('follows an SVG xlink:href, which is what mermaid actually writes', async () => {
+    // Real mermaid output: `<a xlink:href="/chapter/7">`, with no plain href
+    // attribute. Reading only `href` made this handler a no-op and turned every map
+    // click into a full page load.
+    mermaidMock.render.mockResolvedValue({
+      svg: '<svg><a xlink:href="/chapter/7"><text data-testid="node">Seven</text></a></svg>',
+    });
+    render(<KnowledgeMap source="flowchart TD" />);
+    await waitFor(() => expect(screen.getByTestId('node')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByTestId('node'));
+    expect(window.location.pathname).toBe('/chapter/7');
+  });
+
   it('leaves an external link alone', async () => {
     mermaidMock.render.mockResolvedValue({
       svg: '<svg><a href="https://example.com/chapter/7"><text data-testid="node">x</text></a></svg>',

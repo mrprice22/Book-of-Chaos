@@ -86,7 +86,10 @@ function onMapClick(event: React.MouseEvent<HTMLDivElement>) {
   if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
 
   const anchor = (event.target as Element | null)?.closest('a');
-  const href = anchor?.getAttribute('href');
+  // Mermaid writes SVG anchors as `xlink:href`, not `href`. Reading only `href` got
+  // null every time, so this handler quietly did nothing and every map click was a
+  // full page load — which still reached the chapter, and so still looked correct.
+  const href = anchor?.getAttribute('href') ?? anchor?.getAttribute('xlink:href');
   if (!href) return;
 
   const url = new URL(href, window.location.origin);
