@@ -260,3 +260,118 @@ fn find_book(ctx: &ReducerContext, book_id: u64) -> Result<Book, String> {
         .find(book_id)
         .ok_or_else(|| "That book no longer exists.".to_string())
 }
+
+// ---------------------------------------------------------------------------
+// Chapter reducers
+// ---------------------------------------------------------------------------
+
+/// Add a chapter to a book. Only the book's owner may do so.
+///
+/// The new chapter lands at the end of the book. Position is assigned by the
+/// server rather than accepted from the client: the client cannot see other
+/// authors' concurrent inserts, so any position it proposes is a guess, and
+/// `reorder_chapters` is the supported way to move one.
+#[spacetimedb::reducer]
+pub fn create_chapter(
+    ctx: &ReducerContext,
+    book_id: u64,
+    title: String,
+    description: String,
+    is_optional: bool,
+    is_pinned: bool,
+) -> Result<(), String> {
+    let book = find_book(ctx, book_id)?;
+    rules::can_write_chapter(book.owner == ctx.sender(), &title, &description)?;
+
+    let next_position = ctx
+        .db
+        .chapters()
+        .book_id()
+        .filter(book_id)
+        .map(|c| c.position + 1)
+        .max()
+        .unwrap_or(0);
+
+    ctx.db.chapters().insert(Chapter {
+        chapter_id: 0, // assigned by #[auto_inc]
+        book_id,
+        title: title.trim().to_string(),
+        description,
+        position: next_position,
+        is_optional,
+        is_pinned,
+        locale: None,
+        created_at: ctx.timestamp,
+        updated_at: ctx.timestamp,
+    });
+    Ok(())
+}
+
+/// Edit a chapter's title, description and flags. Position is not editable here
+/// — see `reorder_chapters`.
+#[spacetimedb::reducer]
+pub fn update_chapter(
+    ctx: &ReducerContext,
+    chapter_id: u64,
+    title: String,
+    description: String,
+    is_optional: bool,
+    is_pinned: bool,
+) -> Result<(), String> {
+    let chapter = find_chapter(ctx, chapter_id)?;
+    let book = find_book(ctx, chapter.book_id)?;
+    rules::can_write_chapter(book.owner == ctx.sender(), &title, &description)?;
+
+    ctx.db.chapters().chapter_id().update(Chapter {
+        title: title.trim().to_string(),
+        description,
+        is_optional,
+        is_pinned,
+        updated_at: ctx.timestamp,
+        ..chapter
+    });
+    Ok(())
+}
+
+/// Renumber a book's chapters. `ordered_chapter_ids` must be exactly the book's
+/// chapters, each once, in the desired order — see `rules::validate_chapter_order`
+/// for why the whole ordering is required rather than a single move.
+///
+/// Validation runs over the entire list before any row is written, so a rejected
+/// ordering leaves the book untouched instead of half-renumbered.
+#[spacetimedb::reducer]
+pub fn reorder_chapters(
+    ctx: &ReducerContext,
+    book_id: u64,
+    ordered_chapter_ids: Vec<u64>,
+) -> Result<(), String> {
+    let book = find_book(ctx, book_id)?;
+    rules::require_owner(book.owner == ctx.sender())?;
+
+    let mut existing: Vec<Chapter> = ctx.db.chapters().book_id().filter(book_id).collect();
+    let existing_ids: Vec<u64> = existing.iter().map(|c| c.chapter_id).collect();
+    rules::validate_chapter_order(&existing_ids, &ordered_chapter_ids)?;
+
+    for (position, chapter_id) in ordered_chapter_ids.iter().enumerate() {
+        // Safe: validate_chapter_order proved every requested id is in `existing`.
+        let index = existing
+            .iter()
+            .position(|c| c.chapter_id == *chapter_id)
+            .expect("validated ordering referenced a missing chapter");
+        let chapter = existing.swap_remove(index);
+        ctx.db.chapters().chapter_id().update(Chapter {
+            position: position as u32,
+            updated_at: ctx.timestamp,
+            ..chapter
+        });
+    }
+    Ok(())
+}
+
+fn find_chapter(ctx: &ReducerContext, chapter_id: u64) -> Result<Chapter, String> {
+    ctx.db
+        .chapters()
+        .chapter_id()
+        .find(chapter_id)
+        .ok_or_else(|| "That chapter no longer exists.".to_string())
+}

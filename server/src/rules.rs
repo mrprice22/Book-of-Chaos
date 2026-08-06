@@ -124,6 +124,48 @@ pub fn can_write_book(is_owner: bool, title: &str, description: &str) -> Result<
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Chapters
+// ---------------------------------------------------------------------------
+
+/// Same shape as `can_write_book`: authorization first, then inputs. Chapter
+/// ownership is the *book's* ownership — there is no per-chapter role in v0.1.
+pub fn can_write_chapter(is_owner: bool, title: &str, description: &str) -> Result<(), String> {
+    require_owner(is_owner)?;
+    validate_title(title)?;
+    validate_description(description)?;
+    Ok(())
+}
+
+/// Validates a requested chapter ordering against the book's actual chapters.
+///
+/// `reorder_chapters` takes the full ordering rather than a (chapter, position)
+/// pair because positions are only meaningful relative to their siblings: a
+/// single-chapter move has to renumber everything after it anyway, and doing
+/// that client-side then trusting the result would put ordering outside the
+/// trust boundary. Requiring an exact permutation also makes the reducer
+/// naturally reject a stale client that is working from a chapter list which has
+/// since gained or lost a chapter.
+///
+/// `existing` is the book's chapter ids in any order; `requested` is the desired
+/// order. Both are plain slices so this is testable without a database.
+pub fn validate_chapter_order(existing: &[u64], requested: &[u64]) -> Result<(), String> {
+    let mut seen: Vec<u64> = Vec::with_capacity(requested.len());
+    for id in requested {
+        if seen.contains(id) {
+            return Err("That ordering lists the same chapter twice.".to_string());
+        }
+        if !existing.contains(id) {
+            return Err("That ordering refers to a chapter from another book.".to_string());
+        }
+        seen.push(*id);
+    }
+    if requested.len() != existing.len() {
+        return Err("That ordering is missing some of the book's chapters.".to_string());
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -246,5 +288,63 @@ mod tests {
             err.contains("owner"),
             "leaked validation to a non-owner: {err}"
         );
+    }
+
+    // --- chapters ------------------------------------------------------------
+
+    #[test]
+    fn accepts_a_reasonable_chapter() {
+        assert!(can_write_chapter(true, "Attractors", "Strange ones.").is_ok());
+        assert!(can_write_chapter(true, "Attractors", "").is_ok());
+    }
+
+    #[test]
+    fn chapter_non_owner_is_rejected_before_validation() {
+        let err = can_write_chapter(false, "", "").unwrap_err();
+        assert!(
+            err.contains("owner"),
+            "leaked validation to a non-owner: {err}"
+        );
+    }
+
+    #[test]
+    fn chapter_title_is_validated() {
+        assert!(can_write_chapter(true, "   ", "").is_err());
+        assert!(can_write_chapter(true, &"a".repeat(TITLE_MAX + 1), "").is_err());
+    }
+
+    #[test]
+    fn accepts_a_full_permutation() {
+        assert!(validate_chapter_order(&[1, 2, 3], &[3, 1, 2]).is_ok());
+        // Identity is a permutation too, and an empty book reorders to nothing.
+        assert!(validate_chapter_order(&[1, 2, 3], &[1, 2, 3]).is_ok());
+        assert!(validate_chapter_order(&[], &[]).is_ok());
+    }
+
+    #[test]
+    fn rejects_a_partial_ordering() {
+        let err = validate_chapter_order(&[1, 2, 3], &[1, 2]).unwrap_err();
+        assert!(err.contains("missing"), "unhelpful message: {err}");
+    }
+
+    #[test]
+    fn rejects_duplicates() {
+        let err = validate_chapter_order(&[1, 2, 3], &[1, 1, 2]).unwrap_err();
+        assert!(err.contains("twice"), "unhelpful message: {err}");
+    }
+
+    #[test]
+    fn rejects_a_chapter_from_another_book() {
+        // The load-bearing case: smuggling a foreign chapter id into the list must
+        // not renumber a book the caller does not own.
+        let err = validate_chapter_order(&[1, 2, 3], &[1, 2, 99]).unwrap_err();
+        assert!(err.contains("another book"), "unhelpful message: {err}");
+    }
+
+    #[test]
+    fn rejects_extra_ids_even_when_all_are_valid() {
+        // Same length check from the other side: duplicates are caught first, so a
+        // longer list can only mean a foreign id.
+        assert!(validate_chapter_order(&[1, 2], &[1, 2, 3]).is_err());
     }
 }
