@@ -37,7 +37,7 @@ working `cargo --version`, `node --version`, and `spacetime --version` via one c
 
 - [x] **M1.1** `server/` SpacetimeDB Rust module: `Cargo.toml`, `src/lib.rs`, compiles to wasm32
 - [x] **M1.2** Tables `users`, `books`, `chapters`, `knowledge_blocks`, `chapter_deps`, `reader_progress` with the v0.1 column set (include nullable `locale`)
-- [ ] **M1.3** `spacetime publish` to a local standalone instance succeeds
+- [x] **M1.3** `spacetime publish` to a local standalone instance succeeds
 - [ ] **M1.4** `verify.sh` gains: `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test`
 
 **Acceptance:** module publishes locally and `verify.sh` enforces Rust quality gates.
@@ -135,4 +135,9 @@ by table-driven tests including every degenerate graph shape listed above.
 
 Ideas encountered while building that are out of scope. **Append here instead of building them.**
 
-- (empty)
+- **wasm-opt / binaryen not installed.** `spacetime publish` warns "Could not find
+  wasm-opt to optimise the module" and ships an unoptimised wasm. Harmless for the
+  demo. Awkward to fix consistently: binaryen is a `dnf` package (Containerfile,
+  container only) while CI installs toolchains via `scripts/install-toolchain.sh` on
+  a plain runner, so a naive fix makes local and CI diverge — exactly what
+  `toolchain-versions.sh` was introduced to prevent.
