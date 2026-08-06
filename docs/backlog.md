@@ -46,7 +46,7 @@ working `cargo --version`, `node --version`, and `spacetime --version` via one c
 
 ## M2 — Domain reducers
 
-- [ ] **M2.1** `claim_username` — unique, immutable, rejects re-claim and duplicates
+- [x] **M2.1** `claim_username` — unique, immutable, rejects re-claim and duplicates
 - [ ] **M2.2** `create_book` / `update_book` / `publish_book` — caller becomes Owner; non-owners rejected
 - [ ] **M2.3** `create_chapter` / `update_chapter` / `reorder_chapters`
 - [ ] **M2.4** `create_block` / `update_block` / `delete_block` — HTML body sanitized server-side

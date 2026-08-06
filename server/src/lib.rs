@@ -6,7 +6,9 @@
 //!
 //! Domain reducers arrive in M2 and the unlock engine in M3.
 
-use spacetimedb::{Identity, ReducerContext, SpacetimeType, Timestamp};
+pub mod rules;
+
+use spacetimedb::{Identity, ReducerContext, SpacetimeType, Table, Timestamp};
 
 // ---------------------------------------------------------------------------
 // Enums
@@ -156,4 +158,31 @@ pub fn identity_connected(ctx: &ReducerContext) {
 #[spacetimedb::reducer(client_disconnected)]
 pub fn identity_disconnected(ctx: &ReducerContext) {
     log::debug!("client disconnected: {}", ctx.sender());
+}
+
+// ---------------------------------------------------------------------------
+// Identity reducers
+// ---------------------------------------------------------------------------
+
+/// Claim a username for the calling identity. One-time and immutable.
+///
+/// A thin adapter: it reads the two facts the rule needs, delegates the decision,
+/// and only then inserts. The `#[unique]` index on `username` is the real backstop
+/// — the `username_taken` lookup is here so the caller gets a readable message
+/// instead of a constraint violation.
+#[spacetimedb::reducer]
+pub fn claim_username(ctx: &ReducerContext, username: String) -> Result<(), String> {
+    let caller = ctx.sender();
+    let caller_has_username = ctx.db.users().identity().find(caller).is_some();
+    let username_taken = ctx.db.users().username().find(&username).is_some();
+
+    rules::can_claim_username(caller_has_username, username_taken, &username)?;
+
+    ctx.db.users().insert(User {
+        identity: caller,
+        display_name: username.clone(),
+        username,
+        created_at: ctx.timestamp,
+    });
+    Ok(())
 }
