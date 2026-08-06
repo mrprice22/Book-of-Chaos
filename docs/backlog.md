@@ -98,7 +98,7 @@ by table-driven tests including every degenerate graph shape listed above.
 
 ## M6 — Knowledge map
 
-- [ ] **M6.1** Build Mermaid graph source from the chapter dependency graph
+- [x] **M6.1** Build Mermaid graph source from the chapter dependency graph
 - [ ] **M6.2** Render with the four v0.1 node states plus optional/pinned badges
 - [ ] **M6.3** Clickable nodes navigate to the chapter
 - [ ] **M6.4** Re-render on subscription update (node state changes live)
