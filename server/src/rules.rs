@@ -223,6 +223,128 @@ pub fn can_write_block(
     Ok(())
 }
 
+// ---------------------------------------------------------------------------
+// Chapter dependencies
+// ---------------------------------------------------------------------------
+
+/// An edge `(chapter, prerequisite)`: `chapter` stays Blocked until
+/// `prerequisite` is Complete.
+pub type DepEdge = (u64, u64);
+
+/// Returns a cycle in the dependency graph, as the chapters along it, or `None`
+/// if the graph is acyclic.
+///
+/// Iterative depth-first search with an explicit stack. Recursion would be the
+/// shorter code, but a hostile or merely enthusiastic author can nest a graph
+/// deeper than the wasm stack, and a module that traps takes the whole reducer
+/// call with it.
+pub fn find_cycle(edges: &[DepEdge]) -> Option<Vec<u64>> {
+    // 0 = unvisited, 1 = on the current path, 2 = fully explored.
+    let mut state: Vec<(u64, u8)> = Vec::new();
+    let mut nodes: Vec<u64> = Vec::new();
+    for (from, to) in edges {
+        for n in [from, to] {
+            if !nodes.contains(n) {
+                nodes.push(*n);
+                state.push((*n, 0));
+            }
+        }
+    }
+    let mark = |state: &mut Vec<(u64, u8)>, node: u64, value: u8| {
+        if let Some(entry) = state.iter_mut().find(|(n, _)| *n == node) {
+            entry.1 = value;
+        }
+    };
+    let get = |state: &Vec<(u64, u8)>, node: u64| -> u8 {
+        state
+            .iter()
+            .find(|(n, _)| *n == node)
+            .map(|(_, s)| *s)
+            .unwrap_or(0)
+    };
+
+    for start in &nodes {
+        if get(&state, *start) != 0 {
+            continue;
+        }
+        // (node, index of the next outgoing edge to try)
+        let mut stack: Vec<(u64, usize)> = vec![(*start, 0)];
+        mark(&mut state, *start, 1);
+        while let Some((node, edge_index)) = stack.pop() {
+            let next = edges
+                .iter()
+                .filter(|(from, _)| *from == node)
+                .nth(edge_index)
+                .map(|(_, to)| *to);
+            match next {
+                Some(to) => {
+                    stack.push((node, edge_index + 1));
+                    match get(&state, to) {
+                        // `to` is on the current path: everything from it onward
+                        // is the cycle.
+                        1 => {
+                            let mut path: Vec<u64> = stack.iter().map(|(n, _)| *n).collect();
+                            if let Some(start_of_cycle) = path.iter().position(|n| *n == to) {
+                                path.drain(..start_of_cycle);
+                            }
+                            return Some(path);
+                        }
+                        0 => {
+                            mark(&mut state, to, 1);
+                            stack.push((to, 0));
+                        }
+                        _ => {}
+                    }
+                }
+                // Exhausted this node's edges.
+                None => mark(&mut state, node, 2),
+            }
+        }
+    }
+    None
+}
+
+/// Validates a proposed prerequisite set for one chapter.
+///
+/// `set_chapter_deps` replaces a chapter's dependencies wholesale, so
+/// `other_edges` must be every edge in the book *except* the ones belonging to
+/// `chapter_id` — the cycle check runs against the graph as it would be after
+/// the write, not as it is now.
+///
+/// `sibling_ids` is every chapter in the same book. Cross-book prerequisites are
+/// refused: a book has to be a self-contained graph, or publishing one book
+/// could silently block chapters in another.
+pub fn validate_chapter_deps(
+    chapter_id: u64,
+    requested: &[u64],
+    sibling_ids: &[u64],
+    other_edges: &[DepEdge],
+) -> Result<(), String> {
+    let mut seen: Vec<u64> = Vec::with_capacity(requested.len());
+    for prereq in requested {
+        if *prereq == chapter_id {
+            return Err("A chapter cannot depend on itself.".to_string());
+        }
+        if !sibling_ids.contains(prereq) {
+            return Err("A prerequisite must be another chapter in the same book.".to_string());
+        }
+        if seen.contains(prereq) {
+            return Err("That chapter is listed as a prerequisite twice.".to_string());
+        }
+        seen.push(*prereq);
+    }
+
+    let mut edges: Vec<DepEdge> = other_edges.to_vec();
+    edges.extend(requested.iter().map(|prereq| (chapter_id, *prereq)));
+    if find_cycle(&edges).is_some() {
+        return Err(
+            "That would create a loop: these chapters would each be waiting on the other."
+                .to_string(),
+        );
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -460,5 +582,110 @@ mod tests {
     fn rejects_an_overlong_body() {
         assert!(validate_body(&"a".repeat(BODY_MAX)).is_ok());
         assert!(validate_body(&"a".repeat(BODY_MAX + 1)).is_err());
+    }
+
+    // --- dependency graph ----------------------------------------------------
+
+    #[test]
+    fn empty_graph_has_no_cycle() {
+        assert_eq!(find_cycle(&[]), None);
+    }
+
+    #[test]
+    fn linear_chain_has_no_cycle() {
+        assert_eq!(find_cycle(&[(3, 2), (2, 1)]), None);
+    }
+
+    #[test]
+    fn diamond_has_no_cycle() {
+        // 4 -> {2,3} -> 1. A node reachable by two paths is not a cycle, and a
+        // DFS that forgets which nodes it has finished will claim it is.
+        assert_eq!(find_cycle(&[(4, 2), (4, 3), (2, 1), (3, 1)]), None);
+    }
+
+    #[test]
+    fn disconnected_islands_have_no_cycle() {
+        assert_eq!(find_cycle(&[(2, 1), (4, 3), (6, 5)]), None);
+    }
+
+    #[test]
+    fn detects_a_self_loop() {
+        let cycle = find_cycle(&[(1, 1)]).expect("self-loop not detected");
+        assert_eq!(cycle, vec![1]);
+    }
+
+    #[test]
+    fn detects_a_two_node_cycle() {
+        let cycle = find_cycle(&[(1, 2), (2, 1)]).expect("2-cycle not detected");
+        assert_eq!(cycle.len(), 2);
+        assert!(cycle.contains(&1) && cycle.contains(&2), "{cycle:?}");
+    }
+
+    #[test]
+    fn detects_a_three_node_cycle() {
+        let cycle = find_cycle(&[(1, 2), (2, 3), (3, 1)]).expect("3-cycle not detected");
+        assert_eq!(cycle.len(), 3);
+        for n in [1, 2, 3] {
+            assert!(cycle.contains(&n), "incomplete cycle: {cycle:?}");
+        }
+    }
+
+    #[test]
+    fn detects_a_cycle_hanging_off_an_acyclic_prefix() {
+        // The search must not stop after exhausting the clean component.
+        assert!(find_cycle(&[(9, 8), (1, 2), (2, 3), (3, 1)]).is_some());
+    }
+
+    #[test]
+    fn accepts_reasonable_prerequisites() {
+        assert!(validate_chapter_deps(3, &[1, 2], &[1, 2, 3], &[]).is_ok());
+        // Clearing a chapter's prerequisites is always allowed.
+        assert!(validate_chapter_deps(3, &[], &[1, 2, 3], &[(2, 1)]).is_ok());
+    }
+
+    #[test]
+    fn rejects_self_reference() {
+        let err = validate_chapter_deps(3, &[3], &[1, 2, 3], &[]).unwrap_err();
+        assert!(err.contains("itself"), "unhelpful message: {err}");
+    }
+
+    #[test]
+    fn rejects_a_missing_or_foreign_chapter() {
+        let err = validate_chapter_deps(3, &[99], &[1, 2, 3], &[]).unwrap_err();
+        assert!(err.contains("same book"), "unhelpful message: {err}");
+    }
+
+    #[test]
+    fn rejects_duplicate_prerequisites() {
+        let err = validate_chapter_deps(3, &[1, 1], &[1, 2, 3], &[]).unwrap_err();
+        assert!(err.contains("twice"), "unhelpful message: {err}");
+    }
+
+    #[test]
+    fn rejects_a_cycle_the_write_would_close() {
+        // 1 already depends on 2; making 2 depend on 1 closes the loop.
+        let err = validate_chapter_deps(2, &[1], &[1, 2], &[(1, 2)]).unwrap_err();
+        assert!(err.contains("loop"), "unhelpful message: {err}");
+    }
+
+    #[test]
+    fn rejects_a_longer_cycle_the_write_would_close() {
+        let err = validate_chapter_deps(3, &[1], &[1, 2, 3], &[(1, 2), (2, 3)]).unwrap_err();
+        assert!(err.contains("loop"), "unhelpful message: {err}");
+    }
+
+    #[test]
+    fn replacing_deps_ignores_the_chapters_own_old_edges() {
+        // Chapter 2's current edge (2 -> 1) is being replaced, so it must not be
+        // in `other_edges` and must not make (1 -> 2) look like a cycle.
+        assert!(validate_chapter_deps(2, &[], &[1, 2], &[]).is_ok());
+        assert!(validate_chapter_deps(1, &[2], &[1, 2], &[]).is_ok());
+    }
+
+    #[test]
+    fn deps_are_validated_before_the_cycle_check() {
+        // A self-reference must be named as such, not reported as a generic loop.
+        let err = validate_chapter_deps(1, &[1], &[1], &[]).unwrap_err();
+        assert!(err.contains("itself"), "unhelpful message: {err}");
     }
 }

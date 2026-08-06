@@ -377,6 +377,77 @@ fn find_chapter(ctx: &ReducerContext, chapter_id: u64) -> Result<Chapter, String
         .ok_or_else(|| "That chapter no longer exists.".to_string())
 }
 
+/// Replace a chapter's prerequisites with `depends_on_chapter_ids`.
+///
+/// Wholesale replacement rather than add/remove: the author edits a multi-select
+/// and submits the whole set, and a cycle is a property of the finished graph,
+/// not of any one edge. Checking the complete proposed graph once is both
+/// simpler and stricter than checking each edge as it arrives.
+///
+/// Cycles are rejected here, at write time, not at publish time — an author
+/// should be told the moment they draw the loop, while they still remember what
+/// they meant.
+#[spacetimedb::reducer]
+pub fn set_chapter_deps(
+    ctx: &ReducerContext,
+    chapter_id: u64,
+    depends_on_chapter_ids: Vec<u64>,
+) -> Result<(), String> {
+    let chapter = find_chapter(ctx, chapter_id)?;
+    let book = find_book(ctx, chapter.book_id)?;
+    rules::require_owner(book.owner == ctx.sender())?;
+
+    let sibling_ids: Vec<u64> = ctx
+        .db
+        .chapters()
+        .book_id()
+        .filter(chapter.book_id)
+        .map(|c| c.chapter_id)
+        .collect();
+
+    // Every edge in the book except this chapter's own, which are being
+    // replaced. Scoping to the book keeps the cycle search proportional to the
+    // book rather than to the whole platform.
+    let other_edges: Vec<rules::DepEdge> = sibling_ids
+        .iter()
+        .filter(|id| **id != chapter_id)
+        .flat_map(|id| {
+            ctx.db
+                .chapter_deps()
+                .chapter_id()
+                .filter(*id)
+                .map(|d| (d.chapter_id, d.depends_on_chapter_id))
+        })
+        .collect();
+
+    rules::validate_chapter_deps(
+        chapter_id,
+        &depends_on_chapter_ids,
+        &sibling_ids,
+        &other_edges,
+    )?;
+
+    // Validation passed, so the replacement below cannot leave a partial graph.
+    let stale: Vec<u64> = ctx
+        .db
+        .chapter_deps()
+        .chapter_id()
+        .filter(chapter_id)
+        .map(|d| d.dep_id)
+        .collect();
+    for dep_id in stale {
+        ctx.db.chapter_deps().dep_id().delete(dep_id);
+    }
+    for depends_on_chapter_id in depends_on_chapter_ids {
+        ctx.db.chapter_deps().insert(ChapterDep {
+            dep_id: 0, // assigned by #[auto_inc]
+            chapter_id,
+            depends_on_chapter_id,
+        });
+    }
+    Ok(())
+}
+
 // ---------------------------------------------------------------------------
 // Block reducers
 // ---------------------------------------------------------------------------
