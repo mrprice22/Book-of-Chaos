@@ -5,8 +5,8 @@
 # Idempotent: safe to re-run after a version bump in scripts/dev.sh.
 set -euo pipefail
 
-RUST_TOOLCHAIN="${RUST_TOOLCHAIN:-1.83.0}"
-NODE_MAJOR="${NODE_MAJOR:-22}"
+# shellcheck source=./toolchain-versions.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/toolchain-versions.sh"
 
 log() { printf '\033[1;34m  ->\033[0m %s\n' "$*" >&2; }
 

@@ -20,7 +20,15 @@ run() {
   fi
 }
 
-[ -f server/Cargo.toml ]    && run "cd server && cargo fmt --all"
-[ -f client/package.json ]  && run "cd client && npx prettier --write 'src/**/*.{ts,tsx,css}' --log-level warn"
+# `if`, not `test && run`: under `set -e` a bare failing && list aborts the script,
+# so once server/ existed but client/ did not, this would have exited 1 without
+# formatting anything further.
+if [ -f server/Cargo.toml ]; then
+  run "cd server && cargo fmt --all"
+fi
+
+if [ -f client/package.json ]; then
+  run "cd client && npx prettier --write 'src/**/*.{ts,tsx,css}' --log-level warn"
+fi
 
 exit 0

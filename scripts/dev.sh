@@ -17,10 +17,10 @@ CONTAINER=boc-dev
 IMAGE=localhost/boc-dev:latest
 DEVHOME="$REPO/.devhome"
 
-# Pin toolchain versions here. Bumping a version is a one-line change plus a
-# `./scripts/dev.sh setup` re-run — no image rebuild.
-RUST_TOOLCHAIN="${RUST_TOOLCHAIN:-1.83.0}"
-NODE_MAJOR="${NODE_MAJOR:-22}"
+# Toolchain pins live in one file shared with CI. Bumping a version is a one-line
+# change there plus a `./scripts/dev.sh setup` re-run — no image rebuild.
+# shellcheck source=./toolchain-versions.sh
+. "$REPO/scripts/toolchain-versions.sh"
 
 log() { printf '\033[1;34m==>\033[0m %s\n' "$*" >&2; }
 die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }

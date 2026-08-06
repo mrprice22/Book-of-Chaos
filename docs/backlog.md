@@ -35,7 +35,7 @@ working `cargo --version`, `node --version`, and `spacetime --version` via one c
 
 ## M1 — Server module skeleton
 
-- [ ] **M1.1** `server/` SpacetimeDB Rust module: `Cargo.toml`, `src/lib.rs`, compiles to wasm32
+- [x] **M1.1** `server/` SpacetimeDB Rust module: `Cargo.toml`, `src/lib.rs`, compiles to wasm32
 - [ ] **M1.2** Tables `users`, `books`, `chapters`, `knowledge_blocks`, `chapter_deps`, `reader_progress` with the v0.1 column set (include nullable `locale`)
 - [ ] **M1.3** `spacetime publish` to a local standalone instance succeeds
 - [ ] **M1.4** `verify.sh` gains: `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test`
