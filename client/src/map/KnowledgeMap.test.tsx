@@ -1,4 +1,5 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { KnowledgeMap } from './KnowledgeMap';
 
 // Mermaid's real renderer needs layout measurement that jsdom does not provide, so
@@ -61,5 +62,57 @@ describe('KnowledgeMap', () => {
     resolveFirst?.({ svg: '<svg data-testid="first"></svg>' });
     await waitFor(() => expect(screen.getByTestId('second')).toBeInTheDocument());
     expect(screen.queryByTestId('first')).not.toBeInTheDocument();
+  });
+});
+
+describe('clicking a node', () => {
+  // Mermaid renders `click c1 "/chapter/1"` as an anchor; this is that anchor.
+  const svgWithLink =
+    '<svg><a href="/chapter/7"><text data-testid="node">Seven</text></a></svg>';
+
+  beforeEach(() => {
+    window.history.pushState({}, '', '/');
+    mermaidMock.render.mockReset();
+    mermaidMock.render.mockResolvedValue({ svg: svgWithLink });
+  });
+
+  it('navigates in-app instead of reloading the page', async () => {
+    render(<KnowledgeMap source="flowchart TD" />);
+    await waitFor(() => expect(screen.getByTestId('node')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByTestId('node'));
+    expect(window.location.pathname).toBe('/chapter/7');
+  });
+
+  it('leaves a modified click to the browser, so open-in-new-tab still works', async () => {
+    render(<KnowledgeMap source="flowchart TD" />);
+    await waitFor(() => expect(screen.getByTestId('node')).toBeInTheDocument());
+
+    // fireEvent, not userEvent: the modifier has to be on the click event itself,
+    // which is what the handler inspects.
+    fireEvent.click(screen.getByTestId('node'), { metaKey: true });
+    expect(window.location.pathname).toBe('/');
+  });
+
+  it('ignores a click that is not on a node link', async () => {
+    mermaidMock.render.mockResolvedValue({
+      svg: '<svg><text data-testid="node">x</text></svg>',
+    });
+    render(<KnowledgeMap source="flowchart TD" />);
+    await waitFor(() => expect(screen.getByTestId('node')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByTestId('node'));
+    expect(window.location.pathname).toBe('/');
+  });
+
+  it('leaves an external link alone', async () => {
+    mermaidMock.render.mockResolvedValue({
+      svg: '<svg><a href="https://example.com/chapter/7"><text data-testid="node">x</text></a></svg>',
+    });
+    render(<KnowledgeMap source="flowchart TD" />);
+    await waitFor(() => expect(screen.getByTestId('node')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByTestId('node'));
+    expect(window.location.pathname).toBe('/');
   });
 });

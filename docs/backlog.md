@@ -100,7 +100,7 @@ by table-driven tests including every degenerate graph shape listed above.
 
 - [x] **M6.1** Build Mermaid graph source from the chapter dependency graph
 - [x] **M6.2** Render with the four v0.1 node states plus optional/pinned badges
-- [ ] **M6.3** Clickable nodes navigate to the chapter
+- [x] **M6.3** Clickable nodes navigate to the chapter
 - [ ] **M6.4** Re-render on subscription update (node state changes live)
 
 **Acceptance:** map is the primary navigation surface and reflects progress in real time.

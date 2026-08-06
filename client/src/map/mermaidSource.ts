@@ -1,4 +1,5 @@
 import type { ChapterState, Graph } from '../reader/chapterState';
+import { chapterPath } from '../routing/route';
 
 /**
  * Mermaid flowchart source for one book's chapter graph.
@@ -117,6 +118,14 @@ export function toMermaid(graph: Graph, nodes: readonly NodeInput[]): string {
   for (const id of ids) {
     const state = byId.get(id)?.state ?? 'Blocked';
     lines.push(`  class ${nodeId(id)} ${STATE_CLASS[state]}`);
+  }
+
+  // Navigation is a link, not a callback: `click ... call` needs securityLevel
+  // 'loose', and a real href still works if the SPA's click interception ever
+  // breaks. Blocked chapters are linked too — the chapter screen explains the lock,
+  // which is more use than a dead node.
+  for (const id of ids) {
+    lines.push(`  click ${nodeId(id)} "${chapterPath(id)}"`);
   }
 
   return lines.join('\n');

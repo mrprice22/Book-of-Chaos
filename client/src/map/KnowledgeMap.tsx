@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import mermaid from 'mermaid';
 import { t } from '../i18n';
+import { navigate, parseRoute } from '../routing/route';
 
 let initialised = false;
 
@@ -60,5 +61,38 @@ export function KnowledgeMap({ source }: { source: string }) {
   }
 
   // The SVG is Mermaid's output from source this app generated and escaped.
-  return <div className="knowledge-map" dangerouslySetInnerHTML={{ __html: svg }} />;
+  return (
+    // The interactive elements are Mermaid's own anchors inside the SVG — already
+    // focusable and keyboard-activatable. This listener only intercepts their clicks
+    // so navigation stays in-app; it adds no new interaction of its own.
+    <div
+      className="knowledge-map"
+      onClick={onMapClick}
+      dangerouslySetInnerHTML={{ __html: svg }}
+    />
+  );
+}
+
+/**
+ * Turn a click on a node's link into an in-app navigation.
+ *
+ * Mermaid renders `click c1 "/chapter/1"` as a real anchor, so without this the map
+ * would still work — it would just reload the page and drop the connection. Anything
+ * that is not a chapter link (a modified click, an external href) is left to the
+ * browser.
+ */
+function onMapClick(event: React.MouseEvent<HTMLDivElement>) {
+  if (event.defaultPrevented || event.button !== 0) return;
+  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+  const anchor = (event.target as Element | null)?.closest('a');
+  const href = anchor?.getAttribute('href');
+  if (!href) return;
+
+  const url = new URL(href, window.location.origin);
+  if (url.origin !== window.location.origin) return;
+  if (parseRoute(url.pathname).name !== 'chapter') return;
+
+  event.preventDefault();
+  navigate(url.pathname);
 }

@@ -196,3 +196,22 @@ describe('node states and badges', () => {
     );
   });
 });
+
+describe('clickable nodes', () => {
+  it('links every node to its chapter', () => {
+    const source = toMermaid(graphOf([1n, 2n], []), titles([1n, 2n]));
+    expect(source).toContain('click c1 "/chapter/1"');
+    expect(source).toContain('click c2 "/chapter/2"');
+  });
+
+  it('links a blocked chapter too — the chapter screen explains the lock', () => {
+    const source = toMermaid(graphOf([1n, 2n], [[2n, 1n]]), titles([1n, 2n]));
+    expect(source).toContain('click c2 "/chapter/2"');
+  });
+
+  it('emits click directives in id order, keeping the source stable', () => {
+    const source = toMermaid(graphOf([2n, 1n], []), titles([1n, 2n]));
+    const clicks = source.match(/click c\d+/g);
+    expect(clicks).toEqual(['click c1', 'click c2']);
+  });
+});
