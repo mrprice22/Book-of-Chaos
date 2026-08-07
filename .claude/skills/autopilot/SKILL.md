@@ -49,9 +49,49 @@ Green is the only acceptable outcome. If red:
 - Fix the actual cause. Never weaken a check, delete a failing test, add `#[ignore]`,
   loosen a lint, or make a stage SKIP to get to green. That is the one unforgivable move
   here — the gate is the only thing standing between autonomy and a broken repo.
-- Three genuinely different fix attempts on the same failure → escalate (step 6).
+- Three genuinely different fix attempts on the same failure → escalate (step 7).
 
-### 5. Land
+### 5. Sweep for claims this task just falsified
+
+Finishing a task does not only add capability — it can make something already written
+down untrue. Nobody is watching for that, so it is a step rather than a hope.
+
+Run this whenever the task added a `verify.sh` stage, a script, a dependency, a
+toolchain change, or any new capability — i.e. whenever the answer to "what can this
+repo do now?" changed:
+
+```bash
+# The two sections that exist to hold claims about the future. Read them in full.
+sed -n '/## Post-MVP parking lot/,$p' docs/backlog.md
+sed -n '/## Open/,/## Resolved/p'     docs/blocked.md
+
+# Quoted gate output — the one kind of staleness a machine can spot.
+grep -rn 'ran,.*skipped' docs/ readme.md
+```
+
+Do not grep the whole repo for hedging words like "cannot" or "not yet". That was tried:
+twelve hits, nearly all of them ordinary prose, which is how a step stops being run at
+all. These two sections are where forward-looking claims actually live, and they are
+short enough to read.
+
+For each claim, ask: **is this still true after what I just did?** In particular —
+
+- **The parking lot** is written in the future tense, so it ages worst. "X cannot be
+  done until Y" is a note that was true once, not a fact.
+- **A resolved blocker** moves to `## Resolved` with a line saying what resolved it. An
+  open entry nobody needs any more halts the next session for nothing.
+- **Quoted stage counts** — `docs/testing-runbook.md` names an exact
+  `VERIFY GREEN  N ran, M skipped`. Adding a stage silently falsifies it.
+
+Fix what you find. If the correction belongs to the task, it goes in the same commit;
+if it is unrelated housekeeping, a separate `docs:` commit.
+
+*This step exists because it was missed.* M7.4 recorded that an authorization harness
+"cannot join the gate until CI can bring up a database". M8.3 made the gate start a
+real database two tasks later, and the note sat there being wrong until a human asked
+about it — after a summary that repeated the stale claim back to them as fact.
+
+### 6. Land
 
 - Tick the checkbox to `[x]` in `docs/backlog.md`.
 - Commit everything for the task together:
@@ -66,7 +106,7 @@ M3.2: detect dependency cycles
 - Do not push. `git push` is deliberately gated on a human.
 - Return to step 1.
 
-### 6. Escalate
+### 7. Escalate
 
 When genuinely blocked, append an entry to `docs/blocked.md` using the template there,
 leave the task as `[~]`, commit that, and stop with a short summary of what you need.
@@ -98,6 +138,12 @@ leave a break behind — do not try to route around it.
 **Honesty.** When reporting progress, state what actually passed. If a stage skipped,
 say it skipped. A green summary over a skipped gate is a lie the human will act on.
 
+**Repeating a claim is making it.** A limitation written down in an earlier session is
+not evidence — it is a note that was true once. Before restating one in a report ("the
+harness cannot run in CI", "X is not covered", "Y is impossible until Z"), check that it
+is still true *today*. The human cannot tell a fresh finding from a stale quote, and
+will act on both.
+
 ## Reporting
 
 When you stop — milestone complete, blocked, or interrupted — report in this shape:
@@ -107,4 +153,8 @@ Completed: M3.1, M3.2, M3.3
 Verify:    GREEN (7 ran, 3 skipped)
 Next:      M3.4 — table-driven unlock tests
 Blocked:   none
+Corrected: <anything the sweep found, or "nothing">
 ```
+
+`Corrected:` is not filler. It is the only place a human sees that something they were
+previously told has changed.
