@@ -161,6 +161,14 @@ Ideas encountered while building that are out of scope. **Append here instead of
   UX, per the trust-boundary rule in CLAUDE.md. Worth revisiting only if the two
   ever disagree.
 
+- **CI actions target a deprecated Node.** Every run so far emits: "Node.js 20 is
+  deprecated. The following actions target Node.js 20 but are being forced to run on
+  Node.js 24: actions/cache@v4, actions/checkout@v4." It is a warning, not a failure —
+  the runner is already forcing Node 24 and the actions work — so it does not stand
+  between here and a green gate. The fix is bumping both to `@v5` once that is the
+  settled major, which is a change to how the build is fetched and cached and wants a
+  run of its own to confirm, not a rider on a release.
+
 - **wasm-opt / binaryen not installed.** `spacetime publish` warns "Could not find
   wasm-opt to optimise the module" and ships an unoptimised wasm. Harmless for the
   demo. Awkward to fix consistently: binaryen is a `dnf` package (Containerfile,
