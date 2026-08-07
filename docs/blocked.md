@@ -36,44 +36,51 @@ didn't work" is not an entry.
 
 ## Open
 
-### M8.4 — CI cannot be proven green without a push
-**Date:** 2026-08-06
-**Tried:** The workflow is written and its YAML parses; its step list is
-checkout → cache toolchain → `scripts/install-toolchain.sh` → cache build artifacts →
-`npm ci` → `playwright install --with-deps chromium` → `./scripts/verify.sh`. Locally
-that same gate is green: 11 stages ran, 0 skipped, including the Playwright suite
-against a real stack. What cannot be done here is observe an actual run.
-**Blocker:** `git push` is deliberately human-gated (CLAUDE.md, and the autopilot
-skill repeats it). No commit has left this machine, so no workflow has ever been
-triggered, and "green on `main`" is a claim about GitHub that I cannot make.
-**Options:**
-1. *(recommended)* Push `main` and watch the run. If it is green, tick M8.4 and the
-   autopilot can finish with M8.6.
-2. Push to a branch and open a PR first — the same `verify` job runs on
-   `pull_request`, and the `scope-guard` job only runs there, so this also exercises
-   a path nothing has tested.
-3. Install `act` and run the workflow locally. Cheaper than a push, but it proves
-   less: `act` differs from the hosted runner exactly where the risk lives here — the
-   apt-based Playwright dependency install and the cold toolchain install.
-**Needs:** Someone to run `git push` and report the run's outcome. If it fails, the
-log is enough for the autopilot to fix it and continue.
-
-Two specific things that could plausibly fail on a first CI run, none of which can be
-checked from here:
-
-- `install-toolchain.sh` now runs `sudo dnf` when `dnf` is present. On the ubuntu
-  runner it is not, so the block is skipped and `playwright install --with-deps`
-  covers the libraries instead — but that split has only ever executed on the Fedora
-  side.
-- The e2e stage starts the full stack from inside the runner via
-  `scripts/deploy.sh local`, which builds the wasm module and publishes it. The job
-  timeout is 30 minutes and a cold Rust build is the long pole.
+### M8.4 — one push needed to confirm the CI fix
+**Date:** 2026-08-07
+**Tried:** The previous entry under this task claimed CI had never run and could not
+be observed. Both halves were wrong — see Resolved below. CI has run five times on
+`main`; the run for `c954181` failed, the cause was diagnosable from here, and the fix
+is committed. The local gate is green: 11 ran, 0 skipped.
+**Blocker:** `git push` is human-gated, so the fix has not reached GitHub and the run
+that would prove it green has not been triggered. "Green on `main`" remains a claim
+about GitHub, not about this machine.
+**Needs:** `git push`. The run's outcome is then readable from here without
+credentials — `https://api.github.com/repos/mrprice22/Book-of-Chaos/actions/runs?branch=main`
+and the `check-runs/<job id>/annotations` endpoint carry the failing step and its
+error, which is how the last failure was diagnosed. No decision is required; if it is
+green, M8.4 ticks and only M8.6 remains.
 
 **M8.6 (tag `v0.1.0`) is held behind this**, not independently blocked: the Definition
-of Done requires CI green, and tagging a release before its release build has ever
-run would be the wrong order. It is also an outward-facing act that belongs to a
-human, like the push.
+of Done requires CI green, and tagging a release before its release build has passed
+would be the wrong order. It is also an outward-facing act that belongs to a human,
+like the push.
 
 ## Resolved
 
-*(none)*
+### M8.4 — "CI cannot be proven green without a push" (opened 2026-08-06)
+**Resolved:** 2026-08-07, by checking rather than repeating.
+
+The entry rested on "no commit has left this machine, so no workflow has ever been
+triggered." `git ls-remote` shows `origin/main` at `fe225ca` — every commit through the
+escalation itself had already been pushed. The GitHub Actions REST API is public for
+this repo, so runs and their failure annotations are readable from here with no
+credentials and no `gh`.
+
+What the runs actually showed: green on `64c3246` (M2.2), `a773f6d` (M2.6) and
+`237b9e3` (M3.4); **failed** on `c954181`, the commit that added the escalation saying
+CI had never run. The failure was the `verify` job's `Verify` step, after 2m38s —
+annotation `Process from config.webServer was not able to start. Exit code: 1`, i.e.
+the `e2e-smoke` stage.
+
+Cause: `scripts/deploy.sh` is Playwright's `webServer`, and it routes every command
+through `scripts/dev.sh run`. `dev.sh` decided where to run by testing `in_container`
+alone, and a GitHub runner is a VM rather than a container — so it took the host branch
+and died on `require_host_tools` with "podman not found on host". `verify.sh` and
+`generate-bindings.sh` each carried their own `in_container || $CI` test and were
+therefore fine; `deploy.sh` had no such test, which is exactly why the e2e stage was
+the only one that failed. Fixed by moving the decision into `dev.sh` itself as
+`toolchain_is_local`, so there is one definition instead of three copies and one gap.
+
+The lesson is the one the autopilot skill already states: a limitation written down in
+an earlier session is a note that was true once, not evidence. This one was never true.

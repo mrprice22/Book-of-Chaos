@@ -29,6 +29,16 @@ die() { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 # every `run` must execute directly rather than recursing into distrobox.
 in_container() { [ -f /run/.containerenv ] || [ -f /.dockerenv ]; }
 
+# True when the toolchain is reachable without a container: inside the dev container,
+# or on a CI runner where install-toolchain.sh put it straight into $HOME.
+#
+# CI belongs here rather than in each caller. A GitHub runner is a VM, not a container,
+# so in_container is false there and `run` would fall through to require_host_tools and
+# die with "podman not found on host". verify.sh and generate-bindings.sh each carried
+# their own copy of this test; deploy.sh did not, which is why the e2e stage was the
+# only thing that failed in CI — Playwright starts the stack via `deploy.sh local`.
+toolchain_is_local() { in_container || [ -n "${CI:-}" ]; }
+
 require_host_tools() {
   command -v podman >/dev/null 2>&1 || die "podman not found on host"
   command -v distrobox >/dev/null 2>&1 || die "distrobox not found on host"
@@ -68,7 +78,7 @@ BOOTSTRAP='[ -s "$HOME/.boc-env" ] && . "$HOME/.boc-env";'
 
 cmd_run() {
   [ $# -gt 0 ] || die "run needs a command"
-  if in_container; then
+  if toolchain_is_local; then
     bash -c "$BOOTSTRAP cd '$REPO' && $*"
   else
     require_host_tools
