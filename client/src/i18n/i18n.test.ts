@@ -33,8 +33,23 @@ describe('t()', () => {
 describe('the bare-JSX-literal lint rule', () => {
   // The rule is the only thing keeping copy out of components, so it gets a test of
   // its own: a misconfigured selector would fail silently and forever.
+  //
+  // Constructing ESLint is cheap; the first lintText is not, because that is what
+  // resolves the flat config and loads the TypeScript parser. That cost is one-time
+  // and shared by all four cases, so it is paid here instead of landing on whichever
+  // test happens to run first — which is what made this file fail intermittently, the
+  // first case taking ~9s against a 5s default on a loaded machine.
+  //
+  // Deliberately a warm-up rather than a raised per-test timeout: the cases keep the
+  // default 5s budget, so linting itself becoming slow is still a failure.
+  let eslint: ESLint;
+
+  beforeAll(async () => {
+    eslint = new ESLint({});
+    await eslint.lintText('const warm = 1;\n', { filePath: 'src/__lint_warmup.tsx' });
+  }, 60_000);
+
   const lint = async (code: string) => {
-    const eslint = new ESLint({});
     const results = await eslint.lintText(code, { filePath: 'src/__lint_fixture.tsx' });
     return results.flatMap((r) => r.messages.map((m) => m.ruleId));
   };
