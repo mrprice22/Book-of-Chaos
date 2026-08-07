@@ -36,27 +36,19 @@ didn't work" is not an entry.
 
 ## Open
 
-### M8.4 — one push needed to confirm the CI fix
-**Date:** 2026-08-07
-**Tried:** The previous entry under this task claimed CI had never run and could not
-be observed. Both halves were wrong — see Resolved below. CI has run five times on
-`main`; the run for `c954181` failed, the cause was diagnosable from here, and the fix
-is committed. The local gate is green: 11 ran, 0 skipped.
-**Blocker:** `git push` is human-gated, so the fix has not reached GitHub and the run
-that would prove it green has not been triggered. "Green on `main`" remains a claim
-about GitHub, not about this machine.
-**Needs:** `git push`. The run's outcome is then readable from here without
-credentials — `https://api.github.com/repos/mrprice22/Book-of-Chaos/actions/runs?branch=main`
-and the `check-runs/<job id>/annotations` endpoint carry the failing step and its
-error, which is how the last failure was diagnosed. No decision is required; if it is
-green, M8.4 ticks and only M8.6 remains.
-
-**M8.6 (tag `v0.1.0`) is held behind this**, not independently blocked: the Definition
-of Done requires CI green, and tagging a release before its release build has passed
-would be the wrong order. It is also an outward-facing act that belongs to a human,
-like the push.
+*(none)*
 
 ## Resolved
+
+### M8.4 — "one push needed to confirm the CI fix" (opened 2026-08-07)
+**Resolved:** 2026-08-07, by the push and the run that followed it.
+
+Run #6 on `2103045` — job `verify`, every step green including step 8, `./scripts/verify.sh`.
+Duration 3m14s. The two runs before it, on `c954181` and `fe225ca`, both died at 2m33s
+in the `e2e-smoke` stage; the difference is the `toolchain_is_local` fix in `dev.sh`.
+
+CI is green on `main`, which was the last outstanding item in the
+[Definition of Done](./mvp-scope.md#definition-of-done-for-v01). Nothing is blocked.
 
 ### M8.4 — "CI cannot be proven green without a push" (opened 2026-08-06)
 **Resolved:** 2026-08-07, by checking rather than repeating.
