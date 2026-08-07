@@ -29,6 +29,26 @@ die() {
   exit 1
 }
 
+# A startup failure has to explain itself on stderr, because pointing at a file only
+# works for someone sitting at this machine. When this script is Playwright's
+# webServer, all CI reports is "Process from config.webServer was not able to start.
+# Exit code: 1" — the symptom and nothing else — and the job ends before anyone can
+# open .devhome/logs/spacetime.log. That cost a diagnosis once already.
+#
+# 30 lines, not more: verify.sh prints only the last 40 of a failing stage, so a
+# longer dump would push out the error that explains what was being attempted.
+die_stdb() {
+  printf '\033[1;31merror:\033[0m %s\n' "$*" >&2
+  if [ -s "$STDB_LOG" ]; then
+    printf '\n--- last 30 lines of %s ---\n' "${STDB_LOG#"$REPO"/}" >&2
+    tail -30 "$STDB_LOG" >&2
+  else
+    printf '(%s is empty — SpacetimeDB produced no output at all)\n' \
+      "${STDB_LOG#"$REPO"/}" >&2
+  fi
+  exit 1
+}
+
 TARGET="${1:-}"
 [ "$TARGET" = "local" ] || die "usage: $0 local [--no-seed] [--clear]"
 shift
@@ -97,10 +117,10 @@ else
   for _ in $(seq 1 60); do
     stdb_up && break
     # A dead child means the server failed to start; the log says why.
-    kill -0 "$STDB_PID" 2>/dev/null || die "SpacetimeDB exited during startup — see ${STDB_LOG#"$REPO"/}"
+    kill -0 "$STDB_PID" 2>/dev/null || die_stdb "SpacetimeDB exited during startup"
     sleep 1
   done
-  stdb_up || die "SpacetimeDB did not come up within 60s — see ${STDB_LOG#"$REPO"/}"
+  stdb_up || die_stdb "SpacetimeDB did not come up within 60s"
 fi
 
 # --- Module ------------------------------------------------------------------
