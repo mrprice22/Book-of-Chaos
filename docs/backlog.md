@@ -142,8 +142,12 @@ Ideas encountered while building that are out of scope. **Append here instead of
   SpacetimeDB reducers need a running database to invoke. M7.4 confirmed all six
   author writes are refused for a non-owner against a live instance, via a
   throwaway TS harness over the real SDK (2026-08-06); that harness is the right
-  shape for a permanent stage, but it cannot join the gate until CI can bring up
-  a database. The Playwright smoke test (M8.3) will cover the happy paths.
+  shape for a permanent stage. The blocker for making it permanent is gone as of
+  M8.3: the `e2e-smoke` stage starts `deploy.sh local`, so `verify.sh` — locally
+  and in CI — already runs against a live database with the module published and
+  the demo book seeded. Rejection paths could now be asserted the same way the
+  Playwright suite asserts the happy ones. What is missing is the work, not the
+  infrastructure.
 
 - **Chapter state will be computed twice — once in Rust, once in TypeScript.**
   M3.3 derives chapter state from `reader_progress` on read rather than
