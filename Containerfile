@@ -18,6 +18,7 @@ RUN dnf -y install --setopt=install_weak_deps=False \
       tar time unzip util-linux wget which xz zip \
       gcc gcc-c++ make pkgconf-pkg-config openssl-devel perl-core \
       ca-certificates jq \
+      gh \
  && dnf clean all \
  && rm -rf /var/cache/dnf
 
