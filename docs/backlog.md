@@ -439,12 +439,6 @@ them.** The three v0.1 entries that used to live here became M9.
   none of which publish a module — but it is the same hermeticity argument, so it should
   be closed rather than argued away.
 
-- **Future sessions still have to ask GitHub what CI did.** A `scripts/ci-status.sh`
-  printing recent runs with their conclusion and cache state would make "is main green?"
-  a question that gets checked rather than answered from memory. Process tooling, not a
-  fix — but this repo has now had three incidents where a stale claim was repeated as
-  fact.
-
 - **The e2e harnesses leave junk books in the local database, forever.**
   `auth-reject` creates and *publishes* a control book on every run, `answer-key`
   creates a Draft one, and since M10.3 `quiz-gate` creates a third — three books

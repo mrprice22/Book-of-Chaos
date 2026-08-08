@@ -27,7 +27,12 @@ container whose home is `.devhome/` inside the repo.
 ./scripts/dev.sh run '<cmd>'     # run any command inside the container
 ./scripts/dev.sh doctor          # toolchain versions
 ./scripts/verify.sh              # THE quality gate — the only verdict that counts
+./scripts/ci-status.sh           # what CI did with what is actually pushed
 ```
+
+`ci-status.sh` runs on the host and needs no credentials. Use it instead of stating
+whether `main` is green from memory — exit 2 means "no verdict obtained", which is
+not the same as passing.
 
 Never `dnf install` or `rpm-ostree install` on the host. If a tool is missing, add it to
 `Containerfile` or `scripts/install-toolchain.sh`.
