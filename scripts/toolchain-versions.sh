@@ -11,3 +11,9 @@
 # edition2024 cargo feature, which stabilised in 1.85.
 export RUST_TOOLCHAIN="${RUST_TOOLCHAIN:-1.97.1}"
 export NODE_MAJOR="${NODE_MAJOR:-22}"
+
+# binaryen supplies wasm-opt, which `spacetime publish` uses to shrink the module.
+# Pinned to an upstream release tarball rather than installed with dnf: dnf would put
+# it in the Containerfile, where CI — a plain runner that never builds the image —
+# could not see it, and local and CI would quietly optimise differently.
+export BINARYEN_VERSION="${BINARYEN_VERSION:-131}"

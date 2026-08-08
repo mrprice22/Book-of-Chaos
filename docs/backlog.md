@@ -157,9 +157,14 @@ in the safety net that every later milestone's autonomy rests on.
       box gets ticked when a run on this commit shows the warning gone. Note the run will
       be slow: the toolchain cache key hashes `ci.yml`, so bumping the actions
       invalidates it and the toolchain reinstalls from scratch.
-- [ ] **M9.3** Install binaryen in **both** `Containerfile` and `scripts/install-toolchain.sh`,
-      pinned through `scripts/toolchain-versions.sh` so local and CI cannot drift;
-      `spacetime publish` stops warning about `wasm-opt`
+- [x] **M9.3** Install binaryen, pinned through `scripts/toolchain-versions.sh` so local
+      and CI cannot drift; `spacetime publish` stops warning about `wasm-opt`.
+      Installed in `scripts/install-toolchain.sh` **only**, not in both places as drafted:
+      upstream ships static Linux tarballs, so one pinned install path serves the Fedora
+      container and the Ubuntu runner alike. Putting it in the `Containerfile` too would
+      have recreated the divergence the task was written to avoid, since CI never builds
+      that image. Confirmed by output: `spacetime build` now says "Optimising module with
+      wasm-opt..." where it used to say it could not find one
 
 **Acceptance:** deleting a `rules::require_owner(...)` call from any author reducer turns
 the gate red. Verify by actually deleting one, watching it fail, and restoring it — an

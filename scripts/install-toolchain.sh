@@ -53,6 +53,54 @@ if ! spacetime --version >/dev/null 2>&1; then
   curl -sSf https://install.spacetimedb.com | sh -s -- --yes
 fi
 
+# --- binaryen / wasm-opt ----------------------------------------------------
+# `spacetime publish` optimises the module with wasm-opt when it can find one, and
+# ships an unoptimised wasm with a warning when it cannot.
+#
+# Installed from the upstream tarball for the same reason the SpacetimeDB CLI is:
+# CI runs this script on a bare runner and never builds the Containerfile, so a dnf
+# package would exist locally and not in CI. Two build environments producing
+# differently-optimised artifacts is exactly what toolchain-versions.sh exists to
+# stop.
+#
+# Guarded by running the binary, not by `command -v` — the lesson from the cached
+# SpacetimeDB launcher above, and doubly relevant here because wasm-opt is a symlink
+# into ~/.local/share/binaryen. Restoring one path without the other leaves a
+# symlink that resolves to nothing.
+BINARYEN_HOME="$HOME/.local/share/binaryen"
+if [ "$(wasm-opt --version 2>/dev/null | awk '{print $3}')" != "$BINARYEN_VERSION" ]; then
+  case "$(uname -m)" in
+    x86_64)  binaryen_arch="x86_64" ;;
+    aarch64) binaryen_arch="aarch64" ;;
+    *)       binaryen_arch="" ;;
+  esac
+
+  if [ -z "$binaryen_arch" ]; then
+    # Not fatal: an unoptimised module still runs. Loud, because the alternative is
+    # wondering later why one machine's wasm is bigger than another's.
+    log "no binaryen build for $(uname -m) — wasm-opt unavailable, modules ship unoptimised"
+  else
+    log "installing binaryen $BINARYEN_VERSION ($binaryen_arch)"
+    binaryen_tar="binaryen-version_${BINARYEN_VERSION}-${binaryen_arch}-linux.tar.gz"
+    binaryen_url="https://github.com/WebAssembly/binaryen/releases/download/version_${BINARYEN_VERSION}/${binaryen_tar}"
+    binaryen_tmp="$(mktemp -d)"
+
+    curl -sSfL -o "$binaryen_tmp/$binaryen_tar" "$binaryen_url"
+    curl -sSfL -o "$binaryen_tmp/$binaryen_tar.sha256" "$binaryen_url.sha256"
+    # Upstream publishes a checksum, so not checking it would be a choice.
+    (cd "$binaryen_tmp" && sha256sum -c "$binaryen_tar.sha256" >/dev/null)
+
+    rm -rf "$BINARYEN_HOME"
+    mkdir -p "$BINARYEN_HOME" "$HOME/.local/bin"
+    tar -xzf "$binaryen_tmp/$binaryen_tar" -C "$BINARYEN_HOME" --strip-components=1
+    rm -rf "$binaryen_tmp"
+
+    # Symlink rather than copy: wasm-opt resolves libbinaryen through an $ORIGIN
+    # rpath, so it has to keep seeing ../lib next to its real location.
+    ln -sf "$BINARYEN_HOME/bin/wasm-opt" "$HOME/.local/bin/wasm-opt"
+  fi
+fi
+
 # --- Playwright browser dependencies ----------------------------------------
 # The browser binary itself is installed by the client (`npx playwright install
 # chromium`, cached in ~/.cache/ms-playwright). What cannot come from npm is the set

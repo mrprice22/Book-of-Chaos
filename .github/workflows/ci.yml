@@ -32,6 +32,7 @@ jobs:
             ~/.nvm
             ~/.local/bin
             ~/.local/share/spacetime
+            ~/.local/share/binaryen
             ~/.boc-env
           # ~/.local/share/spacetime holds the binaries the ~/.local/bin/spacetime
           # launcher execs. Caching only the launcher restored a spacetime that could
