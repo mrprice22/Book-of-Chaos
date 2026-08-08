@@ -17,6 +17,27 @@ jobs:
     env:
       CI: "true"
 
+    # A cache is correct only if the result is identical with and without it. Until
+    # this matrix existed that property was assumed, and assuming it went wrong three
+    # times — most recently when run #10 went red on a docs-only commit because it was
+    # the first run in a while to actually *hit* the cache.
+    #
+    # The reason it hid for so long is that every interesting run misses: the key
+    # includes ci.yml, so any change to CI itself busts it. The restore path was
+    # therefore exercised only on the runs nobody was looking at. Run #11's green,
+    # which was reported as confirmation of a fix, was a cache miss and proved nothing
+    # about the restore path.
+    #
+    # `cold` skips the caches entirely and installs from scratch; `warm` restores, and
+    # seeds the cache itself on first run. Both must be green. They run in parallel, so
+    # wall-clock is unchanged and only billed minutes double — free on a public repo.
+    strategy:
+      # Without this, one leg failing cancels the other — and the *difference* between
+      # the two legs is the entire diagnostic value of running both.
+      fail-fast: false
+      matrix:
+        cache: [cold, warm]
+
     steps:
       - uses: actions/checkout@v7
 
@@ -24,6 +45,7 @@ jobs:
       # green CI run and a green local run mean the same thing. Divergence between
       # the two is the classic way a verify gate stops being trustworthy.
       - name: Cache toolchain
+        if: matrix.cache == 'warm'
         uses: actions/cache@v6
         with:
           path: |
@@ -60,6 +82,7 @@ jobs:
         run: bash scripts/install-toolchain.sh
 
       - name: Cache build artifacts
+        if: matrix.cache == 'warm'
         uses: actions/cache@v6
         with:
           path: |

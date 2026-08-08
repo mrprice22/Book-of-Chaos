@@ -190,7 +190,7 @@ in the safety net that every later milestone's autonomy rests on.
 - [x] **M9.7** `preflight` verify stage — assert every pinned tool runs **and reports its
       pinned version**, so an environment fault fails at stage 1 naming the tool instead
       of at stage 12 as a symptom. Generalises "verify capability, not presence"
-- [ ] **M9.8** Cold/warm cache matrix in CI. The restore path is exercised only when
+- [x] **M9.8** Cold/warm cache matrix in CI. The restore path is exercised only when
       nobody is watching: every run that changes `ci.yml` misses the cache, so #9 and #11
       were green on a miss and #10 was red on a hit. A cache is correct only if the result
       is identical with and without it — test that property on every push
@@ -287,6 +287,29 @@ them.** The three v0.1 entries that used to live here became M9.
   states client-side. Revisit only if the two ever disagree. Note that M12 adds a second
   instance of this shape for block state, which strengthens the case for revisiting it —
   and would double the cost of getting it wrong.
+
+- **Cache keys are coarser than they need to be.** The toolchain key hashes the whole
+  of `ci.yml`, so editing a comment there busts a ~200M cache and forces a full
+  reinstall. Per-tool caches keyed by the pins in `toolchain-versions.sh` would be
+  content-addressed properly. Deliberately not done alongside M9.8: changing cache
+  *shape* in the same commit that first tests the restore path would confound the
+  result of that test.
+
+- **Nothing checks `ci.yml` before it is pushed.** A YAML error, or a step condition
+  that silently never fires, is discovered by a run. A parse-and-assert stage in
+  `verify.sh` would catch it locally — the same "fail at the right layer" argument that
+  produced M9.7. Small, and it wants its own task rather than a rider.
+
+- **Node is pinned only to a major.** `nvm install 22` takes the newest 22.x, so two
+  machines can differ within the pin. Lower severity than Rust, SpacetimeDB or binaryen,
+  none of which publish a module — but it is the same hermeticity argument, so it should
+  be closed rather than argued away.
+
+- **Future sessions still have to ask GitHub what CI did.** A `scripts/ci-status.sh`
+  printing recent runs with their conclusion and cache state would make "is main green?"
+  a question that gets checked rather than answered from memory. Process tooling, not a
+  fix — but this repo has now had three incidents where a stale claim was repeated as
+  fact.
 
 - **Durable identity is the strongest candidate for v0.3.** Once v0.2 is at a public URL,
   progress still lives in one browser's localStorage with no recovery path. Deferred here
