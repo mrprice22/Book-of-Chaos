@@ -322,6 +322,18 @@ them.** The three v0.1 entries that used to live here became M9.
   fix — but this repo has now had three incidents where a stale claim was repeated as
   fact.
 
+- **Two `verify.sh` runs at once destroy each other, silently and confusingly.**
+  The e2e stages start a real SpacetimeDB and a real vite on fixed ports, and share
+  one cargo target directory. Overlap them and you get "SpacetimeDB already running
+  — leaving it alone", "Blocking waiting for file lock on package cache", a
+  truncated wasm ("failed to parse WebAssembly module: unexpected end-of-file"),
+  `ERR_CONNECTION_REFUSED` on 5173, and "Gave up waiting for the seeded book" — none
+  of which name the actual cause. This is easy to trigger without meaning to,
+  because the Stop hook runs the gate on its own schedule as well. A `flock` on a
+  lockfile at the top of `verify.sh`, either waiting or refusing with a clear
+  message, would turn a confusing half-hour into one line of output. Cost one
+  session most of an afternoon chasing failures that were not in the code.
+
 - **Durable identity is the strongest candidate for v0.3.** Once v0.2 is at a public URL,
   progress still lives in one browser's localStorage with no recovery path. Deferred here
   only because it needs mail infrastructure, not because it is unimportant.
