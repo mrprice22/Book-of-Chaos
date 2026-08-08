@@ -177,8 +177,27 @@ in the safety net that every later milestone's autonomy rests on.
       moving the config aside, and the fix confirmed by moving config *and* data aside;
       cache path narrowed to `~/.local/share/spacetime/bin`
 
+- [x] **M9.5** Pin the SpacetimeDB CLI. `install-toolchain.sh` installs from
+      `releases/latest/download` while `server/Cargo.toml` pins the crate to `2.8.*`, so
+      two runs of one commit can install different CLI versions. Add
+      `SPACETIMEDB_VERSION` to `toolchain-versions.sh`, set `SPACETIME_DOWNLOAD_ROOT`,
+      and guard on the reported version rather than on the CLI merely running
+- [ ] **M9.6** Move the database out of `$HOME`. `~/.local/share/spacetime` mixes the
+      toolchain with the standalone database, so the cache path list has to stay exactly
+      right forever. `deploy.sh` passes `--data-dir` under gitignored `.devhome/`, which
+      CI never caches — the state becomes structurally uncacheable rather than
+      conditionally excluded
+- [ ] **M9.7** `preflight` verify stage — assert every pinned tool runs **and reports its
+      pinned version**, so an environment fault fails at stage 1 naming the tool instead
+      of at stage 12 as a symptom. Generalises "verify capability, not presence"
+- [ ] **M9.8** Cold/warm cache matrix in CI. The restore path is exercised only when
+      nobody is watching: every run that changes `ci.yml` misses the cache, so #9 and #11
+      were green on a miss and #10 was red on a hit. A cache is correct only if the result
+      is identical with and without it — test that property on every push
+
 **Acceptance:** deleting a `rules::require_owner(...)` call from any author reducer turns
-the gate red. Verify by actually deleting one, watching it fail, and restoring it — an
+the gate red. A cache hit and a cache miss produce the same verdict, and that is checked
+rather than assumed. Verify by actually deleting one, watching it fail, and restoring it — an
 authorization test that has never been seen to fail is not evidence.
 
 ---

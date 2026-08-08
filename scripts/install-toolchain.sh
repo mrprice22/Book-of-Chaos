@@ -48,9 +48,19 @@ nvm alias default "$NODE_MAJOR"
 # spacetime on PATH that cannot run. `command -v` is satisfied by the launcher alone,
 # so the install was skipped and the break surfaced much later as "SpacetimeDB exited
 # during startup", with the real error four stages away from its cause.
-if ! spacetime --version >/dev/null 2>&1; then
-  log "installing SpacetimeDB CLI"
-  curl -sSf https://install.spacetimedb.com | sh -s -- --yes
+#
+# Matched against the pinned version, not merely "does it run": a machine that already
+# has some working CLI would otherwise ignore a version bump here forever.
+if [ "$(spacetime --version 2>/dev/null | sed -n 's/.*tool version \([0-9.]*\);.*/\1/p')" \
+     != "$SPACETIMEDB_VERSION" ]; then
+  log "installing SpacetimeDB CLI $SPACETIMEDB_VERSION"
+  # The installer defaults this to releases/latest/download. Pointing it at a tag is
+  # the difference between a pinned toolchain and whatever upstream shipped today.
+  # The assignment belongs to `sh`, which runs the installer — putting it in front of
+  # `curl` would set it for the download and not for the script that reads it.
+  curl -sSf https://install.spacetimedb.com \
+    | SPACETIME_DOWNLOAD_ROOT="https://github.com/clockworklabs/SpacetimeDB/releases/download/v${SPACETIMEDB_VERSION}" \
+      sh -s -- --yes
 fi
 
 # --- binaryen / wasm-opt ----------------------------------------------------

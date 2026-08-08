@@ -12,6 +12,12 @@
 export RUST_TOOLCHAIN="${RUST_TOOLCHAIN:-1.97.1}"
 export NODE_MAJOR="${NODE_MAJOR:-22}"
 
+# The CLI that publishes the module, kept in step with the crate the module is built
+# against — `spacetimedb = "2.8.*"` in server/Cargo.toml. Unpinned, the installer takes
+# releases/latest, so two runs of the same commit could install different CLIs and only
+# one of them need agree with the crate. A build should be a function of its inputs.
+export SPACETIMEDB_VERSION="${SPACETIMEDB_VERSION:-2.8.0}"
+
 # binaryen supplies wasm-opt, which `spacetime publish` uses to shrink the module.
 # Pinned to an upstream release tarball rather than installed with dnf: dnf would put
 # it in the Containerfile, where CI — a plain runner that never builds the image —
