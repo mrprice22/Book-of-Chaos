@@ -140,6 +140,11 @@ stage "e2e-smoke"     "client/e2e/smoke.spec.ts" \
 stage "auth-reject"   "client/e2e/auth-reject.spec.ts" \
   "cd client && npm run --silent test:e2e -- --project=auth-reject"
 
+# The only check that would notice `public` being added to the quiz answer key —
+# the one change that would quietly reduce v0.2 to v0.1 with extra steps.
+stage "answer-key"    "client/e2e/answer-key.spec.ts" \
+  "cd client && npm run --silent test:e2e -- --project=answer-key"
+
 # --- Verdict ----------------------------------------------------------------
 [ "$LIST_ONLY" = 1 ] && exit 0
 

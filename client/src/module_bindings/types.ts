@@ -14,6 +14,7 @@ import {
 export const BlockType = __t.enum("BlockType", {
   Reading: __t.unit(),
   ResourceLink: __t.unit(),
+  Quiz: __t.unit(),
 });
 export type BlockType = __Infer<typeof BlockType>;
 
@@ -75,6 +76,35 @@ export const KnowledgeBlock = __t.object("KnowledgeBlock", {
   updatedAt: __t.timestamp(),
 });
 export type KnowledgeBlock = __Infer<typeof KnowledgeBlock>;
+
+export const QuizAnswerKey = __t.object("QuizAnswerKey", {
+  optionId: __t.u64(),
+  questionId: __t.u64(),
+});
+export type QuizAnswerKey = __Infer<typeof QuizAnswerKey>;
+
+export const QuizConfig = __t.object("QuizConfig", {
+  blockId: __t.u64(),
+  passThreshold: __t.u32(),
+});
+export type QuizConfig = __Infer<typeof QuizConfig>;
+
+export const QuizOption = __t.object("QuizOption", {
+  optionId: __t.u64(),
+  questionId: __t.u64(),
+  textHtml: __t.string(),
+  position: __t.u32(),
+});
+export type QuizOption = __Infer<typeof QuizOption>;
+
+export const QuizQuestion = __t.object("QuizQuestion", {
+  questionId: __t.u64(),
+  blockId: __t.u64(),
+  promptHtml: __t.string(),
+  position: __t.u32(),
+  isMultiAnswer: __t.bool(),
+});
+export type QuizQuestion = __Infer<typeof QuizQuestion>;
 
 export const ReaderProgress = __t.object("ReaderProgress", {
   progressId: __t.u64(),

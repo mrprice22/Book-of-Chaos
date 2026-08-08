@@ -54,6 +54,9 @@ import BooksRow from "./books_table";
 import ChapterDepsRow from "./chapter_deps_table";
 import ChaptersRow from "./chapters_table";
 import KnowledgeBlocksRow from "./knowledge_blocks_table";
+import QuizConfigRow from "./quiz_config_table";
+import QuizOptionsRow from "./quiz_options_table";
+import QuizQuestionsRow from "./quiz_questions_table";
 import ReaderProgressRow from "./reader_progress_table";
 import UsersRow from "./users_table";
 
@@ -120,6 +123,45 @@ const tablesSchema = __schema({
       { name: 'knowledge_blocks_block_id_key', constraint: 'unique', columns: ['blockId'] },
     ],
   }, KnowledgeBlocksRow),
+  quizConfig: __table({
+    name: 'quiz_config',
+    indexes: [
+      { accessor: 'block_id', name: 'quiz_config_block_id_idx_btree', algorithm: 'btree', columns: [
+        'blockId',
+      ] },
+    ],
+    constraints: [
+      { name: 'quiz_config_block_id_key', constraint: 'unique', columns: ['blockId'] },
+    ],
+  }, QuizConfigRow),
+  quizOptions: __table({
+    name: 'quiz_options',
+    indexes: [
+      { accessor: 'option_id', name: 'quiz_options_option_id_idx_btree', algorithm: 'btree', columns: [
+        'optionId',
+      ] },
+      { accessor: 'question_id', name: 'quiz_options_question_id_idx_btree', algorithm: 'btree', columns: [
+        'questionId',
+      ] },
+    ],
+    constraints: [
+      { name: 'quiz_options_option_id_key', constraint: 'unique', columns: ['optionId'] },
+    ],
+  }, QuizOptionsRow),
+  quizQuestions: __table({
+    name: 'quiz_questions',
+    indexes: [
+      { accessor: 'block_id', name: 'quiz_questions_block_id_idx_btree', algorithm: 'btree', columns: [
+        'blockId',
+      ] },
+      { accessor: 'question_id', name: 'quiz_questions_question_id_idx_btree', algorithm: 'btree', columns: [
+        'questionId',
+      ] },
+    ],
+    constraints: [
+      { name: 'quiz_questions_question_id_key', constraint: 'unique', columns: ['questionId'] },
+    ],
+  }, QuizQuestionsRow),
   readerProgress: __table({
     name: 'reader_progress',
     indexes: [
@@ -180,6 +222,12 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "chapter_deps": Omit<typeof tablesSchema.schemaType.tables["chapterDeps"], "accessorName"> & { readonly accessorName: "chapter_deps" };
     /** @deprecated Use `knowledgeBlocks` instead. This alias will be removed in the next major version. */
     readonly "knowledge_blocks": Omit<typeof tablesSchema.schemaType.tables["knowledgeBlocks"], "accessorName"> & { readonly accessorName: "knowledge_blocks" };
+    /** @deprecated Use `quizConfig` instead. This alias will be removed in the next major version. */
+    readonly "quiz_config": Omit<typeof tablesSchema.schemaType.tables["quizConfig"], "accessorName"> & { readonly accessorName: "quiz_config" };
+    /** @deprecated Use `quizOptions` instead. This alias will be removed in the next major version. */
+    readonly "quiz_options": Omit<typeof tablesSchema.schemaType.tables["quizOptions"], "accessorName"> & { readonly accessorName: "quiz_options" };
+    /** @deprecated Use `quizQuestions` instead. This alias will be removed in the next major version. */
+    readonly "quiz_questions": Omit<typeof tablesSchema.schemaType.tables["quizQuestions"], "accessorName"> & { readonly accessorName: "quiz_questions" };
     /** @deprecated Use `readerProgress` instead. This alias will be removed in the next major version. */
     readonly "reader_progress": Omit<typeof tablesSchema.schemaType.tables["readerProgress"], "accessorName"> & { readonly accessorName: "reader_progress" };
   };
@@ -202,6 +250,9 @@ const REMOTE_MODULE = {
 const tableAccessorAliases = {
   "chapter_deps": "chapterDeps",
   "knowledge_blocks": "knowledgeBlocks",
+  "quiz_config": "quizConfig",
+  "quiz_options": "quizOptions",
+  "quiz_questions": "quizQuestions",
   "reader_progress": "readerProgress",
 } as const;
 
@@ -227,6 +278,12 @@ export type DbView = __DbViewBase & {
   readonly "chapter_deps": __DbViewBase["chapterDeps"];
   /** @deprecated Use `knowledgeBlocks` instead. This alias will be removed in the next major version. */
   readonly "knowledge_blocks": __DbViewBase["knowledgeBlocks"];
+  /** @deprecated Use `quizConfig` instead. This alias will be removed in the next major version. */
+  readonly "quiz_config": __DbViewBase["quizConfig"];
+  /** @deprecated Use `quizOptions` instead. This alias will be removed in the next major version. */
+  readonly "quiz_options": __DbViewBase["quizOptions"];
+  /** @deprecated Use `quizQuestions` instead. This alias will be removed in the next major version. */
+  readonly "quiz_questions": __DbViewBase["quizQuestions"];
   /** @deprecated Use `readerProgress` instead. This alias will be removed in the next major version. */
   readonly "reader_progress": __DbViewBase["readerProgress"];
 };
@@ -237,6 +294,12 @@ export type Tables = __TablesBase & {
   readonly "chapter_deps": __TablesBase["chapterDeps"];
   /** @deprecated Use `knowledgeBlocks` instead. This alias will be removed in the next major version. */
   readonly "knowledge_blocks": __TablesBase["knowledgeBlocks"];
+  /** @deprecated Use `quizConfig` instead. This alias will be removed in the next major version. */
+  readonly "quiz_config": __TablesBase["quizConfig"];
+  /** @deprecated Use `quizOptions` instead. This alias will be removed in the next major version. */
+  readonly "quiz_options": __TablesBase["quizOptions"];
+  /** @deprecated Use `quizQuestions` instead. This alias will be removed in the next major version. */
+  readonly "quiz_questions": __TablesBase["quizQuestions"];
   /** @deprecated Use `readerProgress` instead. This alias will be removed in the next major version. */
   readonly "reader_progress": __TablesBase["readerProgress"];
 };

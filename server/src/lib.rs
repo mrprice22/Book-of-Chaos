@@ -23,12 +23,15 @@ pub enum BookStatus {
     Published,
 }
 
-/// The two block types in v0.1. Quiz, Assignment, Reflection and Milestone are
-/// each a subsystem and are deferred — `Reading` is what proves the unlock loop.
+/// v0.2 adds `Quiz` — the block type that makes an unlock *earned* rather than
+/// self-reported. `Assignment`, `Reflection` and `Milestone` remain deferred:
+/// each is a submission or meta-block subsystem, and `Quiz` is the one that
+/// closes v0.1's gap.
 #[derive(SpacetimeType, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BlockType {
     Reading,
     ResourceLink,
+    Quiz,
 }
 
 // ---------------------------------------------------------------------------
@@ -139,6 +142,91 @@ pub struct ReaderProgress {
     #[index(btree)]
     pub block_id: u64,
     pub completed_at: Timestamp,
+}
+
+// ---------------------------------------------------------------------------
+// Quiz tables
+// ---------------------------------------------------------------------------
+//
+// Four tables, three of them public. SpacetimeDB pushes the rows of a public
+// table to every subscribed client, so "which option is correct" cannot be a
+// column on anything a reader can subscribe to — it would be a "Mark as
+// complete" button with extra steps. The split below is the load-bearing
+// architecture of v0.2:
+//
+//   quiz_config     public   — the pass threshold, which the reader is entitled to
+//   quiz_questions  public   — prompt text, order, and how many answers to accept
+//   quiz_options    public   — option text and order, and nothing about truth
+//   quiz_answer_key PRIVATE  — which options are correct. Reducer code only.
+//
+// `quiz_answer_key` carries no `public` attribute, so it is absent from the
+// client schema entirely: `spacetime generate` emits no binding for it and a
+// subscription naming it is refused by the server. That is asserted by
+// `client/e2e/answer-key.spec.ts`, against a live database, rather than assumed.
+
+/// Per-`Quiz`-block settings. One row per block, keyed by it, so a block either
+/// has a quiz or does not — there is no "which config is current" question.
+#[spacetimedb::table(accessor = quiz_config, public)]
+pub struct QuizConfig {
+    /// The `KnowledgeBlock` this quiz belongs to. Its `block_type` is `Quiz`.
+    #[primary_key]
+    pub block_id: u64,
+    /// Percentage of questions that must be fully correct to pass, `1..=100`.
+    /// Validated in `set_quiz` (M10.2).
+    pub pass_threshold: u32,
+}
+
+#[spacetimedb::table(accessor = quiz_questions, public)]
+pub struct QuizQuestion {
+    #[primary_key]
+    #[auto_inc]
+    pub question_id: u64,
+    #[index(btree)]
+    pub block_id: u64,
+    /// Sanitized server-side on write, exactly like `KnowledgeBlock::body_html`.
+    pub prompt_html: String,
+    /// Author-defined order within the quiz.
+    pub position: u32,
+    /// Whether more than one option is correct.
+    ///
+    /// This is the one fact about the answer key the reader is given, and it has
+    /// to be: a radio group and a checkbox group are different controls, and the
+    /// client cannot choose between them from private data. It reveals how many
+    /// answers to select, never which — `set_quiz` keeps it consistent with the
+    /// key rather than accepting it from the author.
+    pub is_multi_answer: bool,
+}
+
+#[spacetimedb::table(accessor = quiz_options, public)]
+pub struct QuizOption {
+    #[primary_key]
+    #[auto_inc]
+    pub option_id: u64,
+    #[index(btree)]
+    pub question_id: u64,
+    /// Sanitized server-side on write.
+    pub text_html: String,
+    pub position: u32,
+}
+
+/// The answer key. **Not public** — this table has no `public` attribute and must
+/// never gain one.
+///
+/// Correctness is the presence of a row rather than a boolean column, for the same
+/// reason `ReaderProgress` works that way: there is no third state to represent,
+/// and a missing row cannot be a stale `false`. It also means the private table
+/// holds only the correct option ids, so even a future leak of its whole contents
+/// is bounded by what it stores.
+#[spacetimedb::table(accessor = quiz_answer_key)]
+pub struct QuizAnswerKey {
+    /// The correct option. One row per correct option, so a multi-answer question
+    /// has several.
+    #[primary_key]
+    pub option_id: u64,
+    /// Denormalised from `QuizOption` so grading can read a question's key without
+    /// scanning every option in the book.
+    #[index(btree)]
+    pub question_id: u64,
 }
 
 // ---------------------------------------------------------------------------

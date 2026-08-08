@@ -34,7 +34,7 @@ export default defineConfig({
    * one `webServer` — running them in one invocation each would bring the whole
    * stack up twice.
    *
-   * `auth-reject` declares no browser: it drives the SDK from Node.
+   * `auth-reject` and `answer-key` declare no browser: they drive the SDK from Node.
    */
   projects: [
     {
@@ -43,6 +43,7 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
     { name: 'auth-reject', testMatch: /auth-reject\.spec\.ts$/ },
+    { name: 'answer-key', testMatch: /answer-key\.spec\.ts$/ },
   ],
 
   webServer: {

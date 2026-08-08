@@ -204,13 +204,24 @@ authorization test that has never been seen to fail is not evidence.
 
 ## M10 — Quiz block: server
 
-- [ ] **M10.1** `BlockType::Quiz`; `quiz_questions`, `quiz_options`, `quiz_config`
+- [x] **M10.1** `BlockType::Quiz`; `quiz_questions`, `quiz_options`, `quiz_config`
       (pass threshold) tables. The correct-answer column lives in a **non-public** table.
       **Test that a real client subscription cannot reach it** — if it can, stop and
-      escalate per [v0.2-scope.md](./v0.2-scope.md#the-answer-key-must-not-reach-the-browser)
+      escalate per [v0.2-scope.md](./v0.2-scope.md#the-answer-key-must-not-reach-the-browser).
+      Four tables, not the three drafted: correctness went into a fourth,
+      `quiz_answer_key`, rather than a column on `quiz_options`, because the reader
+      must be able to read option *text* and so `quiz_options` has to stay public.
+      Correctness is the presence of a row, not a boolean, so the private table holds
+      only the correct option ids. New `answer-key` verify stage; watched failing with
+      `public` added before being trusted
 - [ ] **M10.2** `set_quiz` reducer — owner-only; validates ≥1 question, ≥2 options per
       question, ≥1 correct option per question, threshold in `1..=100`; question and
-      option text sanitized server-side on write
+      option text sanitized server-side on write. Also strengthen
+      `client/e2e/answer-key.spec.ts`: it currently proves the key table is
+      unnameable from a client, which is a schema property and all that can be
+      proven while no reducer can write a row. Once `set_quiz` can, author a quiz
+      through it and assert the client still sees zero correct answers — the
+      row-level half of the same claim
 - [ ] **M10.3** `submit_quiz` reducer — grades server-side, writes a `quiz_attempts` row,
       and completes the block only when score ≥ threshold. Refuses submission for a
       Blocked chapter, exactly as `complete_block` does
