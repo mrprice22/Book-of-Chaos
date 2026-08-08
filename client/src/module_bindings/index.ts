@@ -43,6 +43,7 @@ import DeleteBlockReducer from "./delete_block_reducer";
 import PublishBookReducer from "./publish_book_reducer";
 import ReorderChaptersReducer from "./reorder_chapters_reducer";
 import SetChapterDepsReducer from "./set_chapter_deps_reducer";
+import SetQuizReducer from "./set_quiz_reducer";
 import UpdateBlockReducer from "./update_block_reducer";
 import UpdateBookReducer from "./update_book_reducer";
 import UpdateChapterReducer from "./update_chapter_reducer";
@@ -207,6 +208,7 @@ const reducersSchema = __reducers(
   __reducerSchema("publish_book", PublishBookReducer),
   __reducerSchema("reorder_chapters", ReorderChaptersReducer),
   __reducerSchema("set_chapter_deps", SetChapterDepsReducer),
+  __reducerSchema("set_quiz", SetQuizReducer),
   __reducerSchema("update_block", UpdateBlockReducer),
   __reducerSchema("update_book", UpdateBookReducer),
   __reducerSchema("update_chapter", UpdateChapterReducer),

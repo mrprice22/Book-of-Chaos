@@ -615,6 +615,14 @@ pub fn update_block(
         url.as_deref(),
     )?;
 
+    // Retyping a Quiz into something else leaves its questions with no block that
+    // can render them, and its answer key with nothing that can grade against it.
+    // Dropping the quiz is the honest reading of the author's edit; keeping it
+    // would mean a later retype back to Quiz silently resurrects an old key.
+    if block.block_type == BlockType::Quiz && block_type != BlockType::Quiz {
+        clear_quiz(ctx, block_id);
+    }
+
     ctx.db.knowledge_blocks().block_id().update(KnowledgeBlock {
         title: title.trim().to_string(),
         block_type,
@@ -641,6 +649,9 @@ pub fn delete_block(ctx: &ReducerContext, block_id: u64) -> Result<(), String> {
 
     let chapter_id = block.chapter_id;
     let removed_position = block.position;
+    // Before the block goes, so its quiz rows cannot outlive it. An orphaned
+    // answer key is invisible — nothing references it, so nothing reports it.
+    clear_quiz(ctx, block_id);
     ctx.db.knowledge_blocks().block_id().delete(block_id);
 
     for progress in ctx.db.reader_progress().block_id().filter(block_id) {
@@ -675,6 +686,146 @@ fn find_block(ctx: &ReducerContext, block_id: u64) -> Result<KnowledgeBlock, Str
         .block_id()
         .find(block_id)
         .ok_or_else(|| "That block no longer exists.".to_string())
+}
+
+// ---------------------------------------------------------------------------
+// Quiz authoring
+// ---------------------------------------------------------------------------
+
+/// One answer option as the author submits it.
+///
+/// `is_correct` travels *in* on this struct and never travels back out: it is
+/// split off into `quiz_answer_key` on write, and no public table carries it.
+#[derive(SpacetimeType, Clone, Debug)]
+pub struct QuizOptionInput {
+    pub text_html: String,
+    pub is_correct: bool,
+}
+
+/// One question as the author submits it. Order is the order of the vector.
+#[derive(SpacetimeType, Clone, Debug)]
+pub struct QuizQuestionInput {
+    pub prompt_html: String,
+    pub options: Vec<QuizOptionInput>,
+}
+
+/// Replace a `Quiz` block's questions, options, answer key and pass threshold.
+///
+/// Wholesale replacement, like `set_chapter_deps` and for the same reason: the
+/// author edits a whole form and submits it, and the properties worth enforcing
+/// — "every question has a correct answer", "the threshold is a percentage" —
+/// are properties of the finished quiz rather than of any one edit. Validating
+/// the complete proposal once is both simpler and stricter than validating each
+/// change as it arrives, and it means a rejected quiz leaves the previous one
+/// exactly as it was.
+///
+/// `is_multi_answer` is computed here from the submitted key, never accepted from
+/// the client — see `rules::correct_count`.
+///
+/// Prompt and option text are sanitized on write, exactly like a block body: the
+/// stored string is what every reader renders, so nothing downstream has to
+/// remember to clean it again.
+#[spacetimedb::reducer]
+pub fn set_quiz(
+    ctx: &ReducerContext,
+    block_id: u64,
+    pass_threshold: u32,
+    questions: Vec<QuizQuestionInput>,
+) -> Result<(), String> {
+    let block = find_block(ctx, block_id)?;
+    let chapter = find_chapter(ctx, block.chapter_id)?;
+    let book = find_book(ctx, chapter.book_id)?;
+
+    // A borrowed view of the submission, so the rules module never sees a
+    // SpacetimeDB-derived type.
+    let proposed: Vec<rules::ProposedQuestion<'_>> = questions
+        .iter()
+        .map(|q| rules::ProposedQuestion {
+            prompt_html: &q.prompt_html,
+            options: q
+                .options
+                .iter()
+                .map(|o| rules::ProposedOption {
+                    text_html: &o.text_html,
+                    is_correct: o.is_correct,
+                })
+                .collect(),
+        })
+        .collect();
+
+    rules::can_write_quiz(
+        book.owner == ctx.sender(),
+        block.block_type == BlockType::Quiz,
+        pass_threshold,
+        &proposed,
+    )?;
+
+    // Validation passed, so nothing below can fail part-way and leave a quiz
+    // with half its old questions and half its new ones.
+    clear_quiz(ctx, block_id);
+
+    ctx.db.quiz_config().insert(QuizConfig {
+        block_id,
+        pass_threshold,
+    });
+
+    for (position, question) in questions.iter().enumerate() {
+        let is_multi_answer = rules::correct_count(&proposed[position].options) > 1;
+        let inserted = ctx.db.quiz_questions().insert(QuizQuestion {
+            question_id: 0, // assigned by #[auto_inc]
+            block_id,
+            prompt_html: sanitize::sanitize_html(&question.prompt_html),
+            position: position as u32,
+            is_multi_answer,
+        });
+
+        for (option_position, option) in question.options.iter().enumerate() {
+            let stored = ctx.db.quiz_options().insert(QuizOption {
+                option_id: 0, // assigned by #[auto_inc]
+                question_id: inserted.question_id,
+                text_html: sanitize::sanitize_html(&option.text_html),
+                position: option_position as u32,
+            });
+            if option.is_correct {
+                ctx.db.quiz_answer_key().insert(QuizAnswerKey {
+                    option_id: stored.option_id,
+                    question_id: inserted.question_id,
+                });
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Remove every row belonging to a block's quiz, answer key included.
+///
+/// Written as one function because forgetting any one of the four tables leaves
+/// orphans, and an orphaned `quiz_answer_key` row is the worst of them: it would
+/// keep marking an option correct that no question can reach any more.
+fn clear_quiz(ctx: &ReducerContext, block_id: u64) {
+    let question_ids: Vec<u64> = ctx
+        .db
+        .quiz_questions()
+        .block_id()
+        .filter(block_id)
+        .map(|q| q.question_id)
+        .collect();
+
+    for question_id in question_ids {
+        let option_ids: Vec<u64> = ctx
+            .db
+            .quiz_options()
+            .question_id()
+            .filter(question_id)
+            .map(|o| o.option_id)
+            .collect();
+        for option_id in option_ids {
+            ctx.db.quiz_answer_key().option_id().delete(option_id);
+            ctx.db.quiz_options().option_id().delete(option_id);
+        }
+        ctx.db.quiz_questions().question_id().delete(question_id);
+    }
+    ctx.db.quiz_config().block_id().delete(block_id);
 }
 
 // ---------------------------------------------------------------------------

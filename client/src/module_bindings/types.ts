@@ -97,6 +97,12 @@ export const QuizOption = __t.object("QuizOption", {
 });
 export type QuizOption = __Infer<typeof QuizOption>;
 
+export const QuizOptionInput = __t.object("QuizOptionInput", {
+  textHtml: __t.string(),
+  isCorrect: __t.bool(),
+});
+export type QuizOptionInput = __Infer<typeof QuizOptionInput>;
+
 export const QuizQuestion = __t.object("QuizQuestion", {
   questionId: __t.u64(),
   blockId: __t.u64(),
@@ -105,6 +111,14 @@ export const QuizQuestion = __t.object("QuizQuestion", {
   isMultiAnswer: __t.bool(),
 });
 export type QuizQuestion = __Infer<typeof QuizQuestion>;
+
+export const QuizQuestionInput = __t.object("QuizQuestionInput", {
+  promptHtml: __t.string(),
+  get options() {
+    return __t.array(QuizOptionInput);
+  },
+});
+export type QuizQuestionInput = __Infer<typeof QuizQuestionInput>;
 
 export const ReaderProgress = __t.object("ReaderProgress", {
   progressId: __t.u64(),

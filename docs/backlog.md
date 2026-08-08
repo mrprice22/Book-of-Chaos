@@ -214,7 +214,7 @@ authorization test that has never been seen to fail is not evidence.
       Correctness is the presence of a row, not a boolean, so the private table holds
       only the correct option ids. New `answer-key` verify stage; watched failing with
       `public` added before being trusted
-- [ ] **M10.2** `set_quiz` reducer — owner-only; validates ≥1 question, ≥2 options per
+- [x] **M10.2** `set_quiz` reducer — owner-only; validates ≥1 question, ≥2 options per
       question, ≥1 correct option per question, threshold in `1..=100`; question and
       option text sanitized server-side on write. Also strengthen
       `client/e2e/answer-key.spec.ts`: it currently proves the key table is

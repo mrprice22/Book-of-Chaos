@@ -234,6 +234,135 @@ pub fn can_write_block(
 }
 
 // ---------------------------------------------------------------------------
+// Quizzes
+// ---------------------------------------------------------------------------
+
+pub const PROMPT_MAX: usize = 4_000;
+pub const OPTION_TEXT_MAX: usize = 1_000;
+pub const QUESTIONS_MIN: usize = 1;
+pub const QUESTIONS_MAX: usize = 100;
+pub const OPTIONS_MIN: usize = 2;
+pub const OPTIONS_MAX: usize = 12;
+pub const THRESHOLD_MIN: u32 = 1;
+pub const THRESHOLD_MAX: u32 = 100;
+
+/// One proposed answer option, borrowed from whatever the reducer was handed.
+///
+/// Borrowed rather than owned so this module keeps no copy of the author's input
+/// and, more importantly, needs no `SpacetimeType` — the reducer's wire structs
+/// live in `lib.rs`, and nothing SpacetimeDB-derived crosses into here.
+pub struct ProposedOption<'a> {
+    pub text_html: &'a str,
+    pub is_correct: bool,
+}
+
+/// One proposed question with its options, in author order.
+pub struct ProposedQuestion<'a> {
+    pub prompt_html: &'a str,
+    pub options: Vec<ProposedOption<'a>>,
+}
+
+/// How many of a question's options are correct.
+///
+/// Public because it is also what decides `QuizQuestion::is_multi_answer`, and
+/// that value must be derived from the key rather than accepted from the author
+/// — an author who ticked one box but declared "multi" would ship a checkbox
+/// group the reader cannot satisfy.
+pub fn correct_count(options: &[ProposedOption<'_>]) -> usize {
+    options.iter().filter(|o| o.is_correct).count()
+}
+
+/// Validates a whole proposed quiz.
+///
+/// The whole quiz at once, not question by question, because `set_quiz` replaces
+/// it wholesale: a partially valid quiz is not a thing that should ever reach the
+/// database, and checking everything before writing anything is what makes the
+/// rejection leave the previous quiz untouched.
+///
+/// Messages name the question by its 1-based position. An author looking at a
+/// form with eight questions needs to be told which one, and the ids do not exist
+/// yet at validation time.
+pub fn validate_quiz(
+    pass_threshold: u32,
+    questions: &[ProposedQuestion<'_>],
+) -> Result<(), String> {
+    if !(THRESHOLD_MIN..=THRESHOLD_MAX).contains(&pass_threshold) {
+        return Err(format!(
+            "The pass mark must be between {THRESHOLD_MIN}% and {THRESHOLD_MAX}%."
+        ));
+    }
+    if questions.len() < QUESTIONS_MIN {
+        return Err("A quiz needs at least one question.".to_string());
+    }
+    if questions.len() > QUESTIONS_MAX {
+        return Err(format!(
+            "A quiz can have at most {QUESTIONS_MAX} questions."
+        ));
+    }
+
+    for (index, question) in questions.iter().enumerate() {
+        let n = index + 1;
+        if question.prompt_html.trim().is_empty() {
+            return Err(format!("Question {n} has no text."));
+        }
+        if question.prompt_html.chars().count() > PROMPT_MAX {
+            return Err(format!(
+                "Question {n} is too long — questions can be at most {PROMPT_MAX} characters."
+            ));
+        }
+        if question.options.len() < OPTIONS_MIN {
+            return Err(format!(
+                "Question {n} needs at least {OPTIONS_MIN} answer options."
+            ));
+        }
+        if question.options.len() > OPTIONS_MAX {
+            return Err(format!(
+                "Question {n} can have at most {OPTIONS_MAX} answer options."
+            ));
+        }
+        for (option_index, option) in question.options.iter().enumerate() {
+            if option.text_html.trim().is_empty() {
+                return Err(format!(
+                    "Option {} of question {n} has no text.",
+                    option_index + 1
+                ));
+            }
+            if option.text_html.chars().count() > OPTION_TEXT_MAX {
+                return Err(format!(
+                    "An option of question {n} is too long — options can be at most {OPTION_TEXT_MAX} characters."
+                ));
+            }
+        }
+        if correct_count(&question.options) == 0 {
+            return Err(format!("Question {n} has no correct answer marked."));
+        }
+    }
+    Ok(())
+}
+
+/// Authorization first, then the block is the right kind, then inputs.
+///
+/// The block-type check is passed in as a bool for the same reason
+/// `validate_block_url` takes one: `BlockType` is a SpacetimeDB-derived type and
+/// does not belong in this module. It sits between the two halves deliberately —
+/// "that block is not a quiz" is a fact about the target, not about the author's
+/// input, and reporting it before the input errors saves an author fixing eight
+/// questions attached to the wrong block.
+pub fn can_write_quiz(
+    is_owner: bool,
+    is_quiz_block: bool,
+    pass_threshold: u32,
+    questions: &[ProposedQuestion<'_>],
+) -> Result<(), String> {
+    require_owner(is_owner)?;
+    if !is_quiz_block {
+        return Err("That block is not a quiz.".to_string());
+    }
+    validate_quiz(pass_threshold, questions)?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Ordering
 // ---------------------------------------------------------------------------
 
@@ -673,5 +802,170 @@ mod tests {
         // A self-reference must be named as such, not reported as a generic loop.
         let err = validate_chapter_deps(1, &[1], &[1], &[]).unwrap_err();
         assert!(err.contains("itself"), "unhelpful message: {err}");
+    }
+
+    // --- quizzes -------------------------------------------------------------
+
+    /// Build a question from `(text, is_correct)` pairs. Keeps the cases below
+    /// about the rule under test rather than about struct construction.
+    fn question<'a>(prompt: &'a str, options: &[(&'a str, bool)]) -> ProposedQuestion<'a> {
+        ProposedQuestion {
+            prompt_html: prompt,
+            options: options
+                .iter()
+                .map(|(text_html, is_correct)| ProposedOption {
+                    text_html,
+                    is_correct: *is_correct,
+                })
+                .collect(),
+        }
+    }
+
+    /// The smallest quiz that is valid: one question, two options, one correct.
+    fn minimal_quiz<'a>() -> Vec<ProposedQuestion<'a>> {
+        vec![question(
+            "Is this a question?",
+            &[("Yes", true), ("No", false)],
+        )]
+    }
+
+    #[test]
+    fn accepts_the_smallest_valid_quiz() {
+        assert!(validate_quiz(50, &minimal_quiz()).is_ok());
+    }
+
+    #[test]
+    fn accepts_a_multi_answer_question() {
+        let questions = vec![question(
+            "Which of these are chaotic?",
+            &[("A", true), ("B", true), ("C", false)],
+        )];
+        assert!(validate_quiz(100, &questions).is_ok());
+        assert_eq!(correct_count(&questions[0].options), 2);
+    }
+
+    #[test]
+    fn accepts_the_threshold_bounds() {
+        assert!(validate_quiz(THRESHOLD_MIN, &minimal_quiz()).is_ok());
+        assert!(validate_quiz(THRESHOLD_MAX, &minimal_quiz()).is_ok());
+    }
+
+    #[test]
+    fn rejects_a_threshold_below_the_floor() {
+        // Zero would mean a quiz nobody can fail, which is the whole point of
+        // v0.2 written backwards.
+        let err = validate_quiz(0, &minimal_quiz()).unwrap_err();
+        assert!(err.contains("pass mark"), "unhelpful message: {err}");
+    }
+
+    #[test]
+    fn rejects_a_threshold_above_a_hundred_percent() {
+        let err = validate_quiz(101, &minimal_quiz()).unwrap_err();
+        assert!(err.contains("pass mark"), "unhelpful message: {err}");
+    }
+
+    #[test]
+    fn rejects_a_quiz_with_no_questions() {
+        let err = validate_quiz(50, &[]).unwrap_err();
+        assert!(err.contains("at least one question"), "unhelpful: {err}");
+    }
+
+    #[test]
+    fn rejects_a_quiz_with_too_many_questions() {
+        let questions: Vec<ProposedQuestion<'_>> = (0..=QUESTIONS_MAX)
+            .map(|_| question("Q", &[("Yes", true), ("No", false)]))
+            .collect();
+        let err = validate_quiz(50, &questions).unwrap_err();
+        assert!(err.contains("at most"), "unhelpful message: {err}");
+    }
+
+    #[test]
+    fn rejects_a_question_with_one_option() {
+        // A single option is not a question, it is a formality — and it would
+        // make the quiz unfailable.
+        let questions = vec![question("Only one way out?", &[("Yes", true)])];
+        let err = validate_quiz(50, &questions).unwrap_err();
+        assert!(err.contains("Question 1"), "unnamed question: {err}");
+        assert!(err.contains("answer options"), "unhelpful message: {err}");
+    }
+
+    #[test]
+    fn rejects_a_question_with_no_correct_answer() {
+        let questions = vec![question("Unanswerable?", &[("No", false), ("Nope", false)])];
+        let err = validate_quiz(50, &questions).unwrap_err();
+        assert!(err.contains("no correct answer"), "unhelpful: {err}");
+    }
+
+    #[test]
+    fn names_the_offending_question_by_its_position() {
+        // An author staring at a long form has to be told which question, and
+        // the ids do not exist yet.
+        let questions = vec![
+            question("Fine", &[("Yes", true), ("No", false)]),
+            question("Also fine", &[("Yes", true), ("No", false)]),
+            question("Broken", &[("Yes", false), ("No", false)]),
+        ];
+        let err = validate_quiz(50, &questions).unwrap_err();
+        assert!(err.contains("Question 3"), "wrong question named: {err}");
+    }
+
+    #[test]
+    fn rejects_an_empty_question_prompt() {
+        let questions = vec![question("   ", &[("Yes", true), ("No", false)])];
+        let err = validate_quiz(50, &questions).unwrap_err();
+        assert!(err.contains("no text"), "unhelpful message: {err}");
+    }
+
+    #[test]
+    fn rejects_an_empty_option() {
+        let questions = vec![question("Real question?", &[("Yes", true), ("  ", false)])];
+        let err = validate_quiz(50, &questions).unwrap_err();
+        assert!(err.contains("Option 2"), "unnamed option: {err}");
+    }
+
+    #[test]
+    fn rejects_an_overlong_prompt() {
+        let long = "x".repeat(PROMPT_MAX + 1);
+        let questions = vec![question(&long, &[("Yes", true), ("No", false)])];
+        let err = validate_quiz(50, &questions).unwrap_err();
+        assert!(err.contains("too long"), "unhelpful message: {err}");
+    }
+
+    #[test]
+    fn rejects_an_overlong_option() {
+        let long = "x".repeat(OPTION_TEXT_MAX + 1);
+        let questions = vec![question(
+            "Real question?",
+            &[(long.as_str(), true), ("No", false)],
+        )];
+        let err = validate_quiz(50, &questions).unwrap_err();
+        assert!(err.contains("too long"), "unhelpful message: {err}");
+    }
+
+    #[test]
+    fn a_non_owner_cannot_write_a_quiz() {
+        let err = can_write_quiz(false, true, 50, &minimal_quiz()).unwrap_err();
+        assert_eq!(err, require_owner(false).unwrap_err());
+    }
+
+    #[test]
+    fn a_quiz_cannot_be_attached_to_a_reading_block() {
+        let err = can_write_quiz(true, false, 50, &minimal_quiz()).unwrap_err();
+        assert!(err.contains("not a quiz"), "unhelpful message: {err}");
+    }
+
+    #[test]
+    fn authorization_is_checked_before_anything_else() {
+        // A non-owner submitting garbage must be told they are a non-owner and
+        // nothing more — an input error here would confirm the block exists and
+        // is a quiz.
+        let err = can_write_quiz(false, false, 0, &[]).unwrap_err();
+        assert_eq!(err, require_owner(false).unwrap_err());
+    }
+
+    #[test]
+    fn the_block_type_is_checked_before_the_authors_input() {
+        let err = can_write_quiz(true, false, 0, &[]).unwrap_err();
+        assert!(err.contains("not a quiz"), "unhelpful message: {err}");
     }
 }
