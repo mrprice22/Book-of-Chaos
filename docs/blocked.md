@@ -50,6 +50,19 @@ in the `e2e-smoke` stage; the difference is the `toolchain_is_local` fix in `dev
 CI is green on `main`, which was the last outstanding item in the
 [Definition of Done](./mvp-scope.md#definition-of-done-for-v01). Nothing is blocked.
 
+**Later correction (2026-08-08):** do not read the above as "CI has been green since".
+That run was green, and the three after it were red. Run #6 installed the SpacetimeDB
+CLI for real and then saved a toolchain cache containing `~/.local/bin/spacetime` but
+not the `~/.local/share/spacetime` binaries it execs — so every later run restored a
+`spacetime` that was on `PATH` and could not run, and `install-toolchain.sh`, which
+guarded on `command -v`, declined to repair it. Fixed in `41d55fa` by guarding on
+`spacetime --version` and caching both paths. Green again on `41d55fa`, verified from
+the job log: 11 ran, 0 skipped.
+
+Worth keeping because the shape recurs: a single green run is evidence about that run.
+It is not a property of the branch, and here the green run was the thing that broke the
+ones after it.
+
 ### M8.4 — "CI cannot be proven green without a push" (opened 2026-08-06)
 **Resolved:** 2026-08-07, by checking rather than repeating.
 
