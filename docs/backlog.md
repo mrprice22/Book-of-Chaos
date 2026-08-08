@@ -187,7 +187,7 @@ in the safety net that every later milestone's autonomy rests on.
       right forever. `deploy.sh` passes `--data-dir` under gitignored `.devhome/`, which
       CI never caches — the state becomes structurally uncacheable rather than
       conditionally excluded
-- [ ] **M9.7** `preflight` verify stage — assert every pinned tool runs **and reports its
+- [x] **M9.7** `preflight` verify stage — assert every pinned tool runs **and reports its
       pinned version**, so an environment fault fails at stage 1 naming the tool instead
       of at stage 12 as a symptom. Generalises "verify capability, not presence"
 - [ ] **M9.8** Cold/warm cache matrix in CI. The restore path is exercised only when

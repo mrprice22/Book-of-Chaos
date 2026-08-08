@@ -19,7 +19,11 @@ run once. Nothing else — no Rust, no Node, no SpacetimeDB on the host.
 ./scripts/verify.sh
 ```
 
-Expect `VERIFY GREEN  12 ran, 0 skipped`.
+Expect `VERIFY GREEN  13 ran, 0 skipped`.
+
+If `preflight` FAILs, stop and read it: it means the toolchain does not match the pins
+in `scripts/toolchain-versions.sh`, and every stage after it would be testing something
+other than what this repo specifies.
 
 A stage reporting SKIP means its source directory is missing, which from v0.1 onward
 means something is wrong with the checkout rather than the milestone. Cold runs are slower:

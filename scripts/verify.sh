@@ -105,6 +105,12 @@ if [ "$LIST_ONLY" = 0 ]; then
   RAN=$((RAN + 1))
 fi
 
+# --- Toolchain --------------------------------------------------------------
+# First, so that "the environment is wrong" is reported as itself rather than as
+# whichever later stage happens to trip over it. Guarded on the pins file, which
+# always exists, so this stage can never SKIP.
+stage "preflight"    "scripts/toolchain-versions.sh" "bash scripts/preflight.sh"
+
 # --- Server (SpacetimeDB Rust module) --------------------------------------
 stage "rust-fmt"     "server/Cargo.toml" "cd server && cargo fmt --all -- --check"
 stage "rust-clippy"  "server/Cargo.toml" "cd server && cargo clippy --all-targets -- -D warnings"
