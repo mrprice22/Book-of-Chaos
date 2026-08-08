@@ -1,4 +1,8 @@
-# v0.1 Backlog — Autopilot Work Queue
+# Backlog — Autopilot Work Queue
+
+**Current release: v0.2 "Earned Completion"** — scope in [v0.2-scope.md](./v0.2-scope.md).
+M0–M8 shipped as v0.1 (tag `v0.1.0`) and are kept below as history; the live work starts
+at M9.
 
 This file is the autopilot's task queue and its memory between sessions. It is the
 **single source of truth for what to do next**.
@@ -9,7 +13,7 @@ This file is the autopilot's task queue and its memory between sessions. It is t
 - Exactly one task may be `[~]` (in progress) at a time.
 - A task is only `[x]` when its acceptance criteria are met **and** `./scripts/verify.sh` exits 0.
 - Check the box in the same commit as the work.
-- Do not add features that are not in [mvp-scope.md](./mvp-scope.md). If a task seems to
+- Do not add features that are not in [v0.2-scope.md](./v0.2-scope.md). If a task seems to
   require one, that is a signal to stop and write to [blocked.md](./blocked.md).
 
 ## Legend
@@ -131,47 +135,112 @@ by table-driven tests including every degenerate graph shape listed above.
 
 ---
 
+## M9 — Close the v0.1 debt
+
+The three parking-lot entries, folded in. M9.1 is the one that matters: it closes a hole
+in the safety net that every later milestone's autonomy rests on.
+
+- [ ] **M9.1** `auth-reject` verify stage — a TS harness over the real SDK asserting all
+      six author writes are refused for a non-owner identity, run against the live
+      instance `e2e-smoke` already starts. Add the stage to `verify.sh` in the same commit
+- [ ] **M9.2** Bump `actions/checkout` and `actions/cache` to `@v5`; confirm from the run
+      log that the Node 20 deprecation warning is actually gone, not just relocated
+- [ ] **M9.3** Install binaryen in **both** `Containerfile` and `scripts/install-toolchain.sh`,
+      pinned through `scripts/toolchain-versions.sh` so local and CI cannot drift;
+      `spacetime publish` stops warning about `wasm-opt`
+
+**Acceptance:** deleting a `rules::require_owner(...)` call from any author reducer turns
+the gate red. Verify by actually deleting one, watching it fail, and restoring it — an
+authorization test that has never been seen to fail is not evidence.
+
+---
+
+## M10 — Quiz block: server
+
+- [ ] **M10.1** `BlockType::Quiz`; `quiz_questions`, `quiz_options`, `quiz_config`
+      (pass threshold) tables. The correct-answer column lives in a **non-public** table.
+      **Test that a real client subscription cannot reach it** — if it can, stop and
+      escalate per [v0.2-scope.md](./v0.2-scope.md#the-answer-key-must-not-reach-the-browser)
+- [ ] **M10.2** `set_quiz` reducer — owner-only; validates ≥1 question, ≥2 options per
+      question, ≥1 correct option per question, threshold in `1..=100`; question and
+      option text sanitized server-side on write
+- [ ] **M10.3** `submit_quiz` reducer — grades server-side, writes a `quiz_attempts` row,
+      and completes the block only when score ≥ threshold. Refuses submission for a
+      Blocked chapter, exactly as `complete_block` does
+- [ ] **M10.4** Table-driven grading tests: all correct, all wrong, exactly at threshold,
+      one mark below, multi-answer with a subset selected, unknown option id, submission
+      to a block that is not a Quiz, and resubmission after an earlier pass
+
+**Acceptance:** grading is a pure function over a submission and an answer key, testable
+without a running database — same rule the unlock engine follows. `#[ignore]` on any of
+these is not an option.
+
+---
+
+## M11 — Quiz block: reader and author UI
+
+- [ ] **M11.1** Reader quiz view — render questions, select answers, submit, see score and
+      which questions were wrong. All strings through `t()`
+- [ ] **M11.2** Failing shows the score and a retry; passing completes the block and the
+      map node changes state live, with no reload
+- [ ] **M11.3** Author quiz form — add/remove questions and options, mark correct answers,
+      set the pass threshold. Server rejections surfaced as readable errors, the way M7.2
+      surfaced cycle rejection
+- [ ] **M11.4** Extend the Playwright smoke test to cover fail-then-pass: submit a wrong
+      answer, assert still locked, submit a right one, assert unlocked
+
+**Acceptance:** a quiz can be authored and passed entirely through the UI, and the answer
+key never appears in the page source or in any subscription the client holds.
+
+---
+
+## M12 — Block prerequisites
+
+- [ ] **M12.1** `block_deps` table + `set_block_deps` reducer — rejects self-reference,
+      missing blocks, cross-book references, and cycles, reusing `unlock::find_cycle`
+- [ ] **M12.2** `unlock::block_state(graph, progress, block_id)` pure function; both
+      `complete_block` and `submit_quiz` refuse a block with unmet prerequisites
+- [ ] **M12.3** Client: prerequisite-locked blocks are visibly locked within an otherwise
+      Available chapter, and their controls are not merely hidden
+- [ ] **M12.4** Table-driven tests including the degenerate shapes M3.4 established:
+      chain, diamond, self-cycle, multi-node cycle, cross-chapter edge, empty set
+
+**Acceptance:** block-level and chapter-level gating compose without either one being able
+to override the other, and the rejection paths are tested, not assumed.
+
+---
+
+## M13 — Hosted deployment
+
+**This milestone will escalate on its first task.** It needs an account, and possibly a
+domain and payment method, that autopilot cannot create. That is expected — M13.1 should
+open a `blocked.md` entry naming the exact credentials required and stop, rather than
+inventing infrastructure.
+
+- [ ] **M13.1** Choose and provision the hosted SpacetimeDB target (Maincloud or
+      self-hosted). Escalate for credentials
+- [ ] **M13.2** `scripts/deploy.sh remote` publishes the module to that target; host and
+      module name come from environment configuration, never a hardcoded `localhost`
+- [ ] **M13.3** Client static build deployed and reachable at a public URL
+- [ ] **M13.4** CI deploys on tag push; `docs/testing-runbook.md` gains a section a human
+      can follow **without cloning the repo**
+
+**Acceptance:** someone who has never cloned this repository can open a link, read the
+demo book, fail a quiz, pass it, and watch a node unlock.
+
+---
+
 ## Post-MVP parking lot
 
-Ideas encountered while building that are out of scope. **Append here instead of building them.**
+Ideas encountered while building that are out of scope. **Append here instead of building
+them.** The three v0.1 entries that used to live here became M9.
 
-- **Reducer wiring is not covered by *automated* tests.** Every rule in
-  `rules.rs` is tested directly, and every mutating reducer is verified by
-  inspection to call one before it mutates — but nothing in `verify.sh` would
-  catch someone *deleting* a `rules::require_owner(...)` line, because
-  SpacetimeDB reducers need a running database to invoke. M7.4 confirmed all six
-  author writes are refused for a non-owner against a live instance, via a
-  throwaway TS harness over the real SDK (2026-08-06); that harness is the right
-  shape for a permanent stage. The blocker for making it permanent is gone as of
-  M8.3: the `e2e-smoke` stage starts `deploy.sh local`, so `verify.sh` — locally
-  and in CI — already runs against a live database with the module published and
-  the demo book seeded. Rejection paths could now be asserted the same way the
-  Playwright suite asserts the happy ones. What is missing is the work, not the
-  infrastructure.
+- **Chapter state is computed twice — once in Rust, once in TypeScript.** M3.3 derives
+  chapter state on read rather than materialising it, so the map computes the same four
+  states client-side. Revisit only if the two ever disagree. Note that M12 adds a second
+  instance of this shape for block state, which strengthens the case for revisiting it —
+  and would double the cost of getting it wrong.
 
-- **Chapter state will be computed twice — once in Rust, once in TypeScript.**
-  M3.3 derives chapter state from `reader_progress` on read rather than
-  materialising it into a table, so the map (M6) has to compute the same four
-  states client-side from the subscription. The alternative — a
-  `(reader, chapter) -> state` table maintained by the reducer — needs rows for
-  chapters the reader has never touched, and needs every reader's rows
-  recomputed whenever an author edits a dependency. That is a cache-invalidation
-  problem in exchange for removing a ~20-line function. The server stays
-  authoritative: `complete_block` refuses a Blocked chapter, so the TS copy is
-  UX, per the trust-boundary rule in CLAUDE.md. Worth revisiting only if the two
-  ever disagree.
-
-- **CI actions target a deprecated Node.** Every run so far emits: "Node.js 20 is
-  deprecated. The following actions target Node.js 20 but are being forced to run on
-  Node.js 24: actions/cache@v4, actions/checkout@v4." It is a warning, not a failure —
-  the runner is already forcing Node 24 and the actions work — so it does not stand
-  between here and a green gate. The fix is bumping both to `@v5` once that is the
-  settled major, which is a change to how the build is fetched and cached and wants a
-  run of its own to confirm, not a rider on a release.
-
-- **wasm-opt / binaryen not installed.** `spacetime publish` warns "Could not find
-  wasm-opt to optimise the module" and ships an unoptimised wasm. Harmless for the
-  demo. Awkward to fix consistently: binaryen is a `dnf` package (Containerfile,
-  container only) while CI installs toolchains via `scripts/install-toolchain.sh` on
-  a plain runner, so a naive fix makes local and CI diverge — exactly what
-  `toolchain-versions.sh` was introduced to prevent.
+- **Durable identity is the strongest candidate for v0.3.** Once v0.2 is at a public URL,
+  progress still lives in one browser's localStorage with no recovery path. Deferred here
+  only because it needs mail infrastructure, not because it is unimportant.

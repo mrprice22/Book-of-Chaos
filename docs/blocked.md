@@ -21,8 +21,8 @@ didn't work" is not an entry.
 
 - A credential, account, or paid service is required (hosting, domain, API key)
 - Two reasonable implementations differ in a way the user would care about, and
-  [mvp-scope.md](./mvp-scope.md) does not settle it
-- A task appears to require something [mvp-scope.md](./mvp-scope.md) explicitly defers
+  the current scope contract ([v0.2-scope.md](./v0.2-scope.md)) does not settle it
+- A task appears to require something the current scope contract explicitly defers
 - The same stage of `verify.sh` has failed three times with genuinely different fixes attempted
 - An upstream dependency is broken, unavailable, or has no working version
 

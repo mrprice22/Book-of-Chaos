@@ -265,7 +265,7 @@ The host needs only `podman` and `distrobox` — all toolchains live in a dev co
 ```
 
 Work is driven by [docs/backlog.md](./docs/backlog.md), scoped by
-[docs/mvp-scope.md](./docs/mvp-scope.md), and escalated through
+[docs/v0.2-scope.md](./docs/v0.2-scope.md), and escalated through
 [docs/blocked.md](./docs/blocked.md). Conventions live in [CLAUDE.md](./CLAUDE.md).
 
 Running `/autopilot` in Claude Code works the backlog top to bottom: implement, test,
@@ -275,7 +275,12 @@ verify, commit, repeat — stopping only when genuinely blocked.
 
 ## 📋 Project Status
 
-> **Pre-Alpha** — v0.1 MVP scoped ([docs/mvp-scope.md](./docs/mvp-scope.md)); implementation begins at milestone M0.
+> **v0.1.0 shipped** — the walking skeleton is complete and tagged: dependency graph,
+> live unlock, Mermaid knowledge map, author forms, seeded demo book, green CI.
+> Runs locally via `./scripts/deploy.sh local`; there is no public instance yet.
+>
+> **In progress: v0.2 "Earned Completion"** ([docs/v0.2-scope.md](./docs/v0.2-scope.md)) —
+> server-graded quizzes, block-level prerequisites, and a hosted deployment.
 
 ---
 

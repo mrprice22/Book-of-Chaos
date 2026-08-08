@@ -7,13 +7,14 @@ sequence. Built on SpacetimeDB.
 
 | Document | Role |
 |---|---|
-| [docs/mvp-scope.md](docs/mvp-scope.md) | **Authoritative scope.** If it is not in here, do not build it. |
+| [docs/v0.2-scope.md](docs/v0.2-scope.md) | **Authoritative scope.** If it is not in here, do not build it. |
 | [docs/backlog.md](docs/backlog.md) | The work queue. Top to bottom, one task at a time. |
 | [docs/blocked.md](docs/blocked.md) | Where to escalate instead of guessing. |
+| [docs/mvp-scope.md](docs/mvp-scope.md) | The v0.1 contract. **Shipped** — history, not a queue. |
 | [book-of-chaos-design.md](book-of-chaos-design.md) | Long-term product design. Aspirational — **most of it is deferred.** |
 
-The design doc describes a large product. The MVP is a thin slice of it. When the two
-conflict, `docs/mvp-scope.md` wins.
+The design doc describes a large product. Each release is a thin slice of it. When the two
+conflict, `docs/v0.2-scope.md` wins.
 
 ## Environment
 
