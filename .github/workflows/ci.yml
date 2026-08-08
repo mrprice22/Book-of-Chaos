@@ -18,13 +18,13 @@ jobs:
       CI: "true"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # CI installs the toolchain with the same script the dev container uses, so a
       # green CI run and a green local run mean the same thing. Divergence between
       # the two is the classic way a verify gate stops being trustworthy.
       - name: Cache toolchain
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo
@@ -46,7 +46,7 @@ jobs:
         run: bash scripts/install-toolchain.sh
 
       - name: Cache build artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             server/target
@@ -75,7 +75,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Flag changes to the scope contract

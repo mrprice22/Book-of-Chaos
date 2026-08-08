@@ -146,8 +146,17 @@ in the safety net that every later milestone's autonomy rests on.
       commit. (The "six author writes" this task was drafted with came from M7.4's
       throwaway harness; the module actually has nine owner-gated reducers, and covering
       six of them would have left three doors the gate does not watch.)
-- [ ] **M9.2** Bump `actions/checkout` and `actions/cache` to `@v5`; confirm from the run
-      log that the Node 20 deprecation warning is actually gone, not just relocated
+- [~] **M9.2** Bump `actions/checkout` and `actions/cache`; confirm from the run log that
+      the Node 20 deprecation warning is actually gone, not just relocated.
+      **Code done, confirmation pending a push.** Bumped to `checkout@v7` and `cache@v6`,
+      not the `@v5` this task was drafted with: v5 was current when the parking-lot note
+      was written and is now two majors stale (checkout is at v7.0.1, cache at v6.1.0).
+      Both current majors declare `using: node24`, and they are the only actions in the
+      workflow, so no action targets Node 20 any more. That is read from each action's
+      `action.yml`, which is evidence but not the run log the criterion asks for — the
+      box gets ticked when a run on this commit shows the warning gone. Note the run will
+      be slow: the toolchain cache key hashes `ci.yml`, so bumping the actions
+      invalidates it and the toolchain reinstalls from scratch.
 - [ ] **M9.3** Install binaryen in **both** `Containerfile` and `scripts/install-toolchain.sh`,
       pinned through `scripts/toolchain-versions.sh` so local and CI cannot drift;
       `spacetime publish` stops warning about `wasm-opt`
