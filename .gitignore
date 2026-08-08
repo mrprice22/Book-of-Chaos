@@ -11,6 +11,12 @@ dist/
 .vite/
 *.tsbuildinfo
 
+# Scratch trees left behind if generate-bindings.sh is interrupted mid-swap. They
+# live under client/src, so without this an abandoned one would be type-checked and
+# committed as a second copy of the bindings.
+client/src/module_bindings.new/
+client/src/module_bindings.old/
+
 # Playwright
 playwright-report/
 test-results/
