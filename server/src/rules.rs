@@ -972,9 +972,6 @@ mod tests {
     }
 
     // --- grading -------------------------------------------------------------
-    //
-    // One pass, one fail, one rejection. The exhaustive matrix — thresholds,
-    // multi-answer subsets, unknown ids, resubmission — is M10.4.
 
     fn one_question_key() -> Vec<QuestionKey> {
         vec![QuestionKey {
@@ -1029,6 +1026,259 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.contains("does not have"), "unhelpful message: {err}");
+    }
+
+    // --- the grading matrix (M10.4) -----------------------------------------
+    //
+    // One table, read twice: once for the score and verdict, once for the
+    // per-question breakdown. Same shape as `unlock`'s graph table, and for the
+    // same reason — the interesting failures here are combinations, and a
+    // hand-written test per combination is where a combination goes missing.
+
+    /// A three-question quiz: two single-answer, one multi-answer.
+    ///
+    /// Ids are spaced so a mix-up reads as a wrong id rather than as an
+    /// off-by-one that happens to land on a real option.
+    fn matrix_key() -> Vec<QuestionKey> {
+        vec![
+            QuestionKey {
+                question_id: 1,
+                option_ids: vec![10, 11],
+                correct_option_ids: vec![10],
+            },
+            QuestionKey {
+                question_id: 2,
+                option_ids: vec![20, 21],
+                correct_option_ids: vec![21],
+            },
+            QuestionKey {
+                question_id: 3,
+                option_ids: vec![30, 31, 32],
+                correct_option_ids: vec![30, 31],
+            },
+        ]
+    }
+
+    fn answer(question_id: u64, selected: &[u64]) -> SubmittedAnswer {
+        SubmittedAnswer {
+            question_id,
+            selected_option_ids: selected.to_vec(),
+        }
+    }
+
+    struct GradeCase {
+        shape: &'static str,
+        threshold: u32,
+        submitted: Vec<SubmittedAnswer>,
+        /// Expected floored percentage and pass verdict.
+        expect: (u32, bool),
+        /// Expected per-question correctness, in question order.
+        breakdown: [bool; 3],
+    }
+
+    fn grade_cases() -> Vec<GradeCase> {
+        vec![
+            GradeCase {
+                shape: "all correct",
+                threshold: 100,
+                submitted: vec![
+                    answer(1, &[10]),
+                    answer(2, &[21]),
+                    // Both correct options, in the order the key does not list
+                    // them: a set comparison, not a sequence comparison.
+                    answer(3, &[31, 30]),
+                ],
+                expect: (100, true),
+                breakdown: [true, true, true],
+            },
+            GradeCase {
+                shape: "all wrong",
+                threshold: 1,
+                submitted: vec![answer(1, &[11]), answer(2, &[20]), answer(3, &[32])],
+                expect: (0, false),
+                breakdown: [false, false, false],
+            },
+            GradeCase {
+                shape: "exactly at threshold",
+                // Two of three is 66%, floored. A threshold of 66 must pass.
+                threshold: 66,
+                submitted: vec![answer(1, &[10]), answer(2, &[21]), answer(3, &[32])],
+                expect: (66, true),
+                breakdown: [true, true, false],
+            },
+            GradeCase {
+                shape: "one mark below threshold",
+                // The same submission against 67. This is the pair that would
+                // disagree if `passed` were computed from exact arithmetic
+                // (200/3 >= 67 is false) or from a rounded score (67 >= 67 is
+                // true) — the reader must never be shown a number that
+                // contradicts the verdict.
+                threshold: 67,
+                submitted: vec![answer(1, &[10]), answer(2, &[21]), answer(3, &[32])],
+                expect: (66, false),
+                breakdown: [true, true, false],
+            },
+            GradeCase {
+                shape: "multi-answer with a subset selected",
+                // One of two correct options. No partial credit in v0.2, so this
+                // is wrong, not half right.
+                threshold: 50,
+                submitted: vec![answer(1, &[10]), answer(2, &[21]), answer(3, &[30])],
+                expect: (66, true),
+                breakdown: [true, true, false],
+            },
+            GradeCase {
+                shape: "multi-answer with a superset selected",
+                // Both correct options plus the wrong one. Also wrong: a reader
+                // who ticks everything must not pass a multi-answer question.
+                threshold: 50,
+                submitted: vec![answer(1, &[10]), answer(2, &[21]), answer(3, &[30, 31, 32])],
+                expect: (66, true),
+                breakdown: [true, true, false],
+            },
+            GradeCase {
+                shape: "questions left unanswered",
+                // Absent is wrong, not an error: skipping a question is a thing
+                // readers do, and it fails the question rather than the request.
+                threshold: 33,
+                submitted: vec![answer(1, &[10])],
+                expect: (33, true),
+                breakdown: [true, false, false],
+            },
+            GradeCase {
+                shape: "an empty selection for every question",
+                threshold: 1,
+                submitted: vec![answer(1, &[]), answer(2, &[]), answer(3, &[])],
+                expect: (0, false),
+                breakdown: [false, false, false],
+            },
+            GradeCase {
+                shape: "nothing submitted at all",
+                threshold: 1,
+                submitted: vec![],
+                expect: (0, false),
+                breakdown: [false, false, false],
+            },
+        ]
+    }
+
+    #[test]
+    fn every_submission_shape_scores_as_expected() {
+        let mut failures: Vec<String> = Vec::new();
+        for case in grade_cases() {
+            match grade_quiz(case.threshold, &matrix_key(), &case.submitted) {
+                Err(err) => failures.push(format!("{}: refused with \"{err}\"", case.shape)),
+                Ok(grade) => {
+                    let actual = (grade.score_percent, grade.passed);
+                    if actual != case.expect {
+                        failures.push(format!(
+                            "{}: scored {actual:?}, expected {:?}",
+                            case.shape, case.expect
+                        ));
+                    }
+                }
+            }
+        }
+        assert!(failures.is_empty(), "\n{}", failures.join("\n"));
+    }
+
+    #[test]
+    fn every_submission_shape_reports_the_right_questions_wrong() {
+        // The same table read for the other property. A grader that got the
+        // score right by luck — counting a question wrong and another right in
+        // compensation — would pass the test above and fail this one, and the
+        // breakdown is what M11.1 shows the reader.
+        let mut failures: Vec<String> = Vec::new();
+        for case in grade_cases() {
+            let Ok(grade) = grade_quiz(case.threshold, &matrix_key(), &case.submitted) else {
+                continue; // already reported by the test above
+            };
+            let actual: Vec<bool> = grade.results.iter().map(|r| r.is_correct).collect();
+            if actual != case.breakdown.to_vec() {
+                failures.push(format!(
+                    "{}: breakdown {actual:?}, expected {:?}",
+                    case.shape, case.breakdown
+                ));
+            }
+            let ids: Vec<u64> = grade.results.iter().map(|r| r.question_id).collect();
+            if ids != vec![1, 2, 3] {
+                failures.push(format!("{}: results out of order: {ids:?}", case.shape));
+            }
+            if grade.total != 3 {
+                failures.push(format!("{}: total was {}", case.shape, grade.total));
+            }
+        }
+        assert!(failures.is_empty(), "\n{}", failures.join("\n"));
+    }
+
+    /// Malformed submissions, and the fragment of the message that must name the
+    /// actual problem. These are refusals rather than scores: a submission that
+    /// does not describe this quiz has not been answered wrongly, it has not
+    /// been answered.
+    fn refusal_cases() -> Vec<(&'static str, Vec<SubmittedAnswer>, &'static str)> {
+        vec![
+            (
+                "an option id from a different question",
+                vec![answer(1, &[20])],
+                "does not have",
+            ),
+            (
+                "an option id that exists nowhere",
+                vec![answer(1, &[999])],
+                "does not have",
+            ),
+            (
+                "a question id from a different quiz",
+                vec![answer(99, &[10])],
+                "different quiz",
+            ),
+            (
+                "the same question answered twice",
+                vec![answer(1, &[10]), answer(1, &[11])],
+                "same question twice",
+            ),
+            (
+                "the same option selected twice",
+                vec![answer(3, &[30, 30])],
+                "same option twice",
+            ),
+        ]
+    }
+
+    #[test]
+    fn malformed_submissions_are_refused_by_name() {
+        let mut failures: Vec<String> = Vec::new();
+        for (shape, submitted, expected) in refusal_cases() {
+            match grade_quiz(50, &matrix_key(), &submitted) {
+                Ok(grade) => failures.push(format!("{shape}: graded as {grade:?}")),
+                Err(err) if !err.contains(expected) => {
+                    failures.push(format!("{shape}: unhelpful message \"{err}\""));
+                }
+                Err(_) => {}
+            }
+        }
+        assert!(failures.is_empty(), "\n{}", failures.join("\n"));
+    }
+
+    #[test]
+    fn a_quiz_with_no_questions_is_refused_rather_than_dividing_by_zero() {
+        // Unreachable through `set_quiz`, which demands a question. Reachable by
+        // a future caller that forgets to check, and the failure mode without
+        // this guard is a panicking reducer rather than a rejection.
+        let err = grade_quiz(50, &[], &[]).unwrap_err();
+        assert!(err.contains("no questions"), "unhelpful message: {err}");
+    }
+
+    #[test]
+    fn grading_is_independent_of_the_thresholds_extremes() {
+        // A threshold of 1 passes on any single right answer out of three (33%);
+        // a threshold of 100 needs all of them. Both are values `validate_quiz`
+        // accepts, so both must behave.
+        let one_right = vec![answer(1, &[10])];
+        assert!(grade_quiz(1, &matrix_key(), &one_right).unwrap().passed);
+        assert!(!grade_quiz(100, &matrix_key(), &one_right).unwrap().passed);
+        let all_right = vec![answer(1, &[10]), answer(2, &[21]), answer(3, &[30, 31])];
+        assert!(grade_quiz(100, &matrix_key(), &all_right).unwrap().passed);
     }
 
     #[test]

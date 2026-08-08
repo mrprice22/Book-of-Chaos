@@ -308,6 +308,16 @@ test('a submission naming an option from another question is refused', async () 
   expect(refusal).toContain('does not have');
 });
 
+test('submit_quiz is refused for a block that is not a quiz', async () => {
+  // The mirror of `complete_block` refusing a quiz. Neither reducer may be used
+  // on the other's block type, or "which door completes this block" stops being
+  // a property of the block.
+  const refusal = await refusalFrom(
+    conn.reducers.submitQuiz({ blockId: open.readingBlockId, answers: [] }),
+  );
+  expect(refusal).toContain('not a quiz');
+});
+
 test('a quiz block with no quiz configured cannot be submitted or completed', async () => {
   const submitRefusal = await refusalFrom(
     conn.reducers.submitQuiz({ blockId: open.blankQuizId, answers: [] }),

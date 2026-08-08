@@ -249,9 +249,20 @@ authorization test that has never been seen to fail is not evidence.
       control stays green. Also folded in: `set_quiz` was the **tenth**
       owner-gated reducer and `auth-reject` did not cover it, so M9.1's guarantee
       had a door in it. It does now
-- [ ] **M10.4** Table-driven grading tests: all correct, all wrong, exactly at threshold,
+- [x] **M10.4** Table-driven grading tests: all correct, all wrong, exactly at threshold,
       one mark below, multi-answer with a subset selected, unknown option id, submission
-      to a block that is not a Quiz, and resubmission after an earlier pass
+      to a block that is not a Quiz, and resubmission after an earlier pass.
+      Nine submission shapes in one table, read twice — once for the score and
+      verdict, once for the per-question breakdown, because a grader can get a
+      score right by counting one question wrong and another right in
+      compensation. Five malformed shapes in a second table, each asserting the
+      message names the actual problem. Two of the listed cases are not
+      properties of the pure function and live in the `quiz-gate` stage instead:
+      "not a Quiz block" and "resubmission after a pass" are both facts about the
+      reducer, and testing them against the grader would have tested nothing.
+      The matrix was watched failing: dropping the length half of the
+      set-equality check turns four shapes red by name, including the one an
+      empty selection exposes — `all()` over nothing is vacuously true
 
 **Acceptance:** grading is a pure function over a submission and an answer key, testable
 without a running database — same rule the unlock engine follows. `#[ignore]` on any of
