@@ -224,7 +224,19 @@ authorization test that has never been seen to fail is not evidence.
       row-level half of the same claim
 - [ ] **M10.3** `submit_quiz` reducer — grades server-side, writes a `quiz_attempts` row,
       and completes the block only when score ≥ threshold. Refuses submission for a
-      Blocked chapter, exactly as `complete_block` does
+      Blocked chapter, exactly as `complete_block` does.
+      **Close the hole M10.1 opened first, before writing `submit_quiz`.**
+      `complete_block` checks only the chapter's unlock state and never looks at
+      `block_type`, so since M10.1 a client can complete a `Quiz` block by calling it
+      directly and never answering anything. That is the exact thing this release
+      exists to prevent — [v0.2-scope.md](./v0.2-scope.md#in-scope) says a `Quiz`
+      block completes *only* on a passing attempt, never via "Mark as complete" — and
+      nothing currently tests it. It wants a `rules` check refusing a Quiz block, a
+      rejection test beside the existing `can_complete_block` ones, and a case in
+      `auth-reject.spec.ts` or its own harness so a live client is seen being
+      refused. Adding `submit_quiz` without this leaves two doors and gates one.
+      Also decide what a `Quiz` block with **no quiz configured** does: `create_block`
+      and `update_block` both happily produce one, so `submit_quiz` will meet it
 - [ ] **M10.4** Table-driven grading tests: all correct, all wrong, exactly at threshold,
       one mark below, multi-answer with a subset selected, unknown option id, submission
       to a block that is not a Quiz, and resubmission after an earlier pass
@@ -238,12 +250,26 @@ these is not an option.
 ## M11 — Quiz block: reader and author UI
 
 - [ ] **M11.1** Reader quiz view — render questions, select answers, submit, see score and
-      which questions were wrong. All strings through `t()`
+      which questions were wrong. All strings through `t()`.
+      Note the starting point: `ChapterView` does not branch on `blockType` at all, so
+      a `Quiz` block currently renders as its body HTML with a "Mark as complete"
+      button under it. The button must be gone for a Quiz block, not merely
+      ineffective — M10.3 makes the server refuse it, and a control the server always
+      rejects is a bug the reader gets to discover. `is_multi_answer` on the question
+      decides radio group versus checkbox group; it is the only fact about the answer
+      key the client is given, and it exists for exactly this. A Quiz block whose
+      quiz has not been configured yet needs a defined rendering too — see M10.3
 - [ ] **M11.2** Failing shows the score and a retry; passing completes the block and the
       map node changes state live, with no reload
 - [ ] **M11.3** Author quiz form — add/remove questions and options, mark correct answers,
       set the pass threshold. Server rejections surfaced as readable errors, the way M7.2
-      surfaced cycle rejection
+      surfaced cycle rejection. `BlockForm`'s `TYPES` array is a hand-written
+      `['Reading', 'ResourceLink']` that does not derive from `BlockType`, so adding
+      `Quiz` to the enum did not add it to the form and did not break the build —
+      it needs adding by hand, along with a `blockType.Quiz` string in
+      `i18n/en-US.ts`. Every rejection `rules::validate_quiz` can produce names the
+      offending question by its 1-based position; the form should keep that number
+      meaningful rather than showing the message detached from the question
 - [ ] **M11.4** Extend the Playwright smoke test to cover fail-then-pass: submit a wrong
       answer, assert still locked, submit a right one, assert unlocked
 
@@ -321,6 +347,16 @@ them.** The three v0.1 entries that used to live here became M9.
   a question that gets checked rather than answered from memory. Process tooling, not a
   fix — but this repo has now had three incidents where a stale claim was repeated as
   fact.
+
+- **The e2e harnesses leave junk books in the local database, forever.**
+  `auth-reject` creates and *publishes* a control book on every run, and
+  `answer-key` creates a Draft one, into `.devhome/spacetime-data` — which persists
+  between runs by design since M9.6. CI is unaffected (it starts empty), but a
+  developer's local reader library fills up with "Authorization control
+  1754…" over time, and the smoke test's assertions are one accumulated
+  coincidence away from ambiguity: it matches on things like `6 chapters`, which is
+  unique today only because the junk books are small. Cheapest fix is for each
+  harness to delete what it created; the honest one is a documented reset.
 
 - **Two `verify.sh` runs at once destroy each other, silently and confusingly.**
   The e2e stages start a real SpacetimeDB and a real vite on fixed ports, and share
