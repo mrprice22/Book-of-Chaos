@@ -431,8 +431,7 @@ pub fn validate_chapter_deps(
 // Reading
 // ---------------------------------------------------------------------------
 
-/// Whether a reader may mark a block complete, given the state of the chapter it
-/// lives in.
+/// Whether a reader may touch a chapter's blocks at all, given its unlock state.
 ///
 /// This is the reader-side trust boundary. Without it a client could complete
 /// blocks in any order and walk itself through a locked book one reducer call at
@@ -441,13 +440,162 @@ pub fn validate_chapter_deps(
 ///
 /// `Complete` is allowed through: a chapter finishes when its non-optional
 /// blocks are done, so its optional blocks are still there to be read.
-pub fn can_complete_block(state: crate::unlock::ChapterState) -> Result<(), String> {
+///
+/// Shared by `complete_block` and `submit_quiz` rather than duplicated, because a
+/// second copy is a second chance to forget it — and a quiz that could be
+/// submitted inside a Blocked chapter would reopen exactly the door
+/// `can_complete_block` was written to shut.
+pub fn require_reachable_chapter(state: crate::unlock::ChapterState) -> Result<(), String> {
     match state {
         crate::unlock::ChapterState::Blocked => {
             Err("Finish this chapter's prerequisites first.".to_string())
         }
         _ => Ok(()),
     }
+}
+
+/// Whether a reader may mark a block complete by asserting they have read it.
+///
+/// `is_quiz` closes the hole M10.1 opened. A `Quiz` block completes *only* on a
+/// passing attempt — [v0.2-scope.md](../../docs/v0.2-scope.md#in-scope) — and
+/// `complete_block` is a reducer any client can call with any block id. Without
+/// this check the release's entire thesis is bypassed by calling the v0.1 reducer
+/// on the v0.2 block type, and the answer key being unreachable would stop
+/// mattering because nobody would need it.
+///
+/// The chapter check runs first: an unreachable chapter is the coarser fact, and
+/// the reply should not confirm what kind of block sits inside a chapter the
+/// reader has not earned.
+pub fn can_complete_block(state: crate::unlock::ChapterState, is_quiz: bool) -> Result<(), String> {
+    require_reachable_chapter(state)?;
+    if is_quiz {
+        return Err("Answer this quiz to complete it.".to_string());
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Grading
+// ---------------------------------------------------------------------------
+
+/// One question's answer key, as grading needs to see it.
+///
+/// `option_ids` is every option the question has, not just the correct ones: it
+/// is what makes "that option is not part of this question" answerable, and a
+/// grader that cannot tell an unknown id from a wrong one would silently accept
+/// a submission naming options from somebody else's quiz.
+pub struct QuestionKey {
+    pub question_id: u64,
+    pub option_ids: Vec<u64>,
+    pub correct_option_ids: Vec<u64>,
+}
+
+/// One question's selections, as the reader submitted them.
+pub struct SubmittedAnswer {
+    pub question_id: u64,
+    pub selected_option_ids: Vec<u64>,
+}
+
+/// Per-question outcome, in the order the key lists the questions.
+#[derive(Debug, PartialEq, Eq)]
+pub struct QuestionResult {
+    pub question_id: u64,
+    pub is_correct: bool,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct Grade {
+    pub correct: u32,
+    pub total: u32,
+    /// Percentage of questions answered fully correctly, rounded **down**.
+    pub score_percent: u32,
+    pub passed: bool,
+    pub results: Vec<QuestionResult>,
+}
+
+/// Grade a submission against an answer key.
+///
+/// Pure — no database, no reducer context — for the same reason the unlock engine
+/// is: this is where "earned" is decided, and it has to be testable exhaustively.
+///
+/// Three decisions worth naming:
+///
+/// - **A question is correct only if the selected set matches the key exactly.**
+///   No partial credit; the v0.2 scope defers it. A multi-answer question with
+///   one of two correct options selected is wrong, not half right.
+/// - **An unanswered question is wrong, but an unknown one is a rejection.** A
+///   reader who skips a question has simply failed it. A submission naming a
+///   question or an option that is not part of this quiz is a broken or hostile
+///   client, and answering it with a score would be pretending to have graded
+///   something.
+/// - **`passed` is decided from the number the reader is shown.** `score_percent`
+///   floors, and the comparison uses that same floored value rather than exact
+///   arithmetic, so "66% ≥ 67%" and "you failed" can never appear together.
+pub fn grade_quiz(
+    pass_threshold: u32,
+    key: &[QuestionKey],
+    submitted: &[SubmittedAnswer],
+) -> Result<Grade, String> {
+    if key.is_empty() {
+        // Unreachable through `set_quiz`, which demands at least one question.
+        // Guarded anyway because the alternative is a division by zero.
+        return Err("This quiz has no questions.".to_string());
+    }
+
+    let mut answered: Vec<u64> = Vec::with_capacity(submitted.len());
+    for answer in submitted {
+        let Some(question) = key.iter().find(|q| q.question_id == answer.question_id) else {
+            return Err("That answer is for a question in a different quiz.".to_string());
+        };
+        if answered.contains(&answer.question_id) {
+            return Err("That submission answers the same question twice.".to_string());
+        }
+        answered.push(answer.question_id);
+
+        let mut seen: Vec<u64> = Vec::with_capacity(answer.selected_option_ids.len());
+        for option_id in &answer.selected_option_ids {
+            if !question.option_ids.contains(option_id) {
+                return Err(
+                    "That answer selects an option this question does not have.".to_string()
+                );
+            }
+            if seen.contains(option_id) {
+                return Err("That answer selects the same option twice.".to_string());
+            }
+            seen.push(*option_id);
+        }
+    }
+
+    let results: Vec<QuestionResult> = key
+        .iter()
+        .map(|question| {
+            let selected: &[u64] = submitted
+                .iter()
+                .find(|a| a.question_id == question.question_id)
+                .map_or(&[], |a| a.selected_option_ids.as_slice());
+            // Both sides are duplicate-free by now, so equal length plus
+            // containment is set equality.
+            let is_correct = selected.len() == question.correct_option_ids.len()
+                && selected
+                    .iter()
+                    .all(|id| question.correct_option_ids.contains(id));
+            QuestionResult {
+                question_id: question.question_id,
+                is_correct,
+            }
+        })
+        .collect();
+
+    let total = key.len() as u32;
+    let correct = results.iter().filter(|r| r.is_correct).count() as u32;
+    let score_percent = correct * 100 / total;
+    Ok(Grade {
+        correct,
+        total,
+        score_percent,
+        passed: score_percent >= pass_threshold,
+        results,
+    })
 }
 
 #[cfg(test)]
@@ -783,18 +931,104 @@ mod tests {
 
     #[test]
     fn a_reader_may_complete_blocks_in_a_reachable_chapter() {
-        assert!(can_complete_block(ChapterState::Available).is_ok());
-        assert!(can_complete_block(ChapterState::InProgress).is_ok());
+        assert!(can_complete_block(ChapterState::Available, false).is_ok());
+        assert!(can_complete_block(ChapterState::InProgress, false).is_ok());
         // A finished chapter can still have optional blocks left to read.
-        assert!(can_complete_block(ChapterState::Complete).is_ok());
+        assert!(can_complete_block(ChapterState::Complete, false).is_ok());
     }
 
     #[test]
     fn a_reader_may_not_complete_blocks_in_a_blocked_chapter() {
         // The load-bearing case: a hostile client calling the reducer directly
         // must not be able to walk itself through a locked book.
-        let err = can_complete_block(ChapterState::Blocked).unwrap_err();
+        let err = can_complete_block(ChapterState::Blocked, false).unwrap_err();
         assert!(err.contains("prerequisites"), "unhelpful message: {err}");
+        // And the same for a quiz block, by the other route.
+        assert!(require_reachable_chapter(ChapterState::Blocked).is_err());
+        assert!(require_reachable_chapter(ChapterState::Available).is_ok());
+    }
+
+    #[test]
+    fn a_quiz_block_cannot_be_completed_by_assertion() {
+        // The hole M10.1 opened: `complete_block` predates `BlockType::Quiz` and
+        // would happily complete one, which is the exact bypass v0.2 exists to
+        // prevent. Every reachable state must refuse it, not just some.
+        for state in [
+            ChapterState::Available,
+            ChapterState::InProgress,
+            ChapterState::Complete,
+        ] {
+            let err = can_complete_block(state, true).unwrap_err();
+            assert!(err.contains("quiz"), "unhelpful message: {err}");
+        }
+    }
+
+    #[test]
+    fn an_unreachable_chapter_is_reported_before_the_block_type() {
+        // A reader who has not earned the chapter should be told that, rather
+        // than what kind of block is waiting inside it.
+        let err = can_complete_block(ChapterState::Blocked, true).unwrap_err();
+        assert!(err.contains("prerequisites"), "unhelpful message: {err}");
+    }
+
+    // --- grading -------------------------------------------------------------
+    //
+    // One pass, one fail, one rejection. The exhaustive matrix — thresholds,
+    // multi-answer subsets, unknown ids, resubmission — is M10.4.
+
+    fn one_question_key() -> Vec<QuestionKey> {
+        vec![QuestionKey {
+            question_id: 1,
+            option_ids: vec![10, 11],
+            correct_option_ids: vec![10],
+        }]
+    }
+
+    #[test]
+    fn a_correct_answer_passes() {
+        let grade = grade_quiz(
+            100,
+            &one_question_key(),
+            &[SubmittedAnswer {
+                question_id: 1,
+                selected_option_ids: vec![10],
+            }],
+        )
+        .unwrap();
+        assert_eq!(grade.correct, 1);
+        assert_eq!(grade.score_percent, 100);
+        assert!(grade.passed);
+    }
+
+    #[test]
+    fn a_wrong_answer_fails() {
+        let grade = grade_quiz(
+            50,
+            &one_question_key(),
+            &[SubmittedAnswer {
+                question_id: 1,
+                selected_option_ids: vec![11],
+            }],
+        )
+        .unwrap();
+        assert_eq!(grade.score_percent, 0);
+        assert!(!grade.passed);
+        assert!(!grade.results[0].is_correct);
+    }
+
+    #[test]
+    fn an_option_from_another_question_is_refused_rather_than_marked_wrong() {
+        // Scoring it would be pretending to have graded something.
+        let err = grade_quiz(
+            50,
+            &one_question_key(),
+            &[SubmittedAnswer {
+                question_id: 1,
+                selected_option_ids: vec![99],
+            }],
+        )
+        .unwrap_err();
+        assert!(err.contains("does not have"), "unhelpful message: {err}");
     }
 
     #[test]

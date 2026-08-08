@@ -29,12 +29,12 @@ export default defineConfig({
   },
 
   /**
-   * Two projects so `verify.sh` can report them as separate stages, and so a broken
-   * authorization check does not show up under a name that says "smoke". They share
-   * one `webServer` — running them in one invocation each would bring the whole
-   * stack up twice.
+   * One project per named gate, so `verify.sh` can report them as separate stages
+   * and so a broken authorization check does not show up under a name that says
+   * "smoke". They share one `webServer` — running them in one invocation each
+   * would bring the whole stack up twice.
    *
-   * `auth-reject` and `answer-key` declare no browser: they drive the SDK from Node.
+   * Everything but `chromium` declares no browser: they drive the SDK from Node.
    */
   projects: [
     {
@@ -44,6 +44,7 @@ export default defineConfig({
     },
     { name: 'auth-reject', testMatch: /auth-reject\.spec\.ts$/ },
     { name: 'answer-key', testMatch: /answer-key\.spec\.ts$/ },
+    { name: 'quiz-gate', testMatch: /quiz-gate\.spec\.ts$/ },
   ],
 
   webServer: {

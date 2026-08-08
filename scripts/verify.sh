@@ -145,6 +145,12 @@ stage "auth-reject"   "client/e2e/auth-reject.spec.ts" \
 stage "answer-key"    "client/e2e/answer-key.spec.ts" \
   "cd client && npm run --silent test:e2e -- --project=answer-key"
 
+# The reader-side twin of `auth-reject`: the only check that would notice
+# `complete_block` starting to accept a quiz block, or a failing score completing
+# one. Both are single-call bypasses of the whole release.
+stage "quiz-gate"     "client/e2e/quiz-gate.spec.ts" \
+  "cd client && npm run --silent test:e2e -- --project=quiz-gate"
+
 # --- Verdict ----------------------------------------------------------------
 [ "$LIST_ONLY" = 1 ] && exit 0
 

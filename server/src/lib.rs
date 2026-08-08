@@ -148,7 +148,7 @@ pub struct ReaderProgress {
 // Quiz tables
 // ---------------------------------------------------------------------------
 //
-// Four tables, three of them public. SpacetimeDB pushes the rows of a public
+// Five tables, four of them public. SpacetimeDB pushes the rows of a public
 // table to every subscribed client, so "which option is correct" cannot be a
 // column on anything a reader can subscribe to — it would be a "Mark as
 // complete" button with extra steps. The split below is the load-bearing
@@ -157,6 +157,7 @@ pub struct ReaderProgress {
 //   quiz_config     public   — the pass threshold, which the reader is entitled to
 //   quiz_questions  public   — prompt text, order, and how many answers to accept
 //   quiz_options    public   — option text and order, and nothing about truth
+//   quiz_attempts   public   — a reader's score and verdict, never their answers
 //   quiz_answer_key PRIVATE  — which options are correct. Reducer code only.
 //
 // `quiz_answer_key` carries no `public` attribute, so it is absent from the
@@ -207,6 +208,34 @@ pub struct QuizOption {
     /// Sanitized server-side on write.
     pub text_html: String,
     pub position: u32,
+}
+
+/// One graded submission. Public, and per-reader like `ReaderProgress`.
+///
+/// It stores the verdict, not the submission: the score and whether it passed,
+/// never which options were chosen. That keeps the table from becoming an oblique
+/// copy of the answer key — rows saying "this selection scored 100%" would carry
+/// exactly the fact `quiz_answer_key` exists to withhold, on a public table, for
+/// every reader to read.
+///
+/// A row per attempt rather than a row per reader: retakes are unlimited in v0.2
+/// and a passing attempt is not undone by a later failing one, so the history has
+/// to survive. Attempt *policy* — caps, cooldowns, best-vs-last — is deferred, and
+/// keeping every attempt is what leaves it implementable.
+#[spacetimedb::table(accessor = quiz_attempts, public)]
+pub struct QuizAttempt {
+    #[primary_key]
+    #[auto_inc]
+    pub attempt_id: u64,
+    #[index(btree)]
+    pub identity: Identity,
+    #[index(btree)]
+    pub block_id: u64,
+    /// Percentage of questions answered fully correctly, rounded down.
+    pub score_percent: u32,
+    /// `score_percent >= QuizConfig::pass_threshold`, decided server-side.
+    pub passed: bool,
+    pub submitted_at: Timestamp,
 }
 
 /// The answer key. **Not public** — this table has no `public` attribute and must
@@ -660,6 +689,18 @@ pub fn delete_block(ctx: &ReducerContext, block_id: u64) -> Result<(), String> {
             .progress_id()
             .delete(progress.progress_id);
     }
+    // Attempts go the same way as progress: a score against a block nobody can
+    // open is unreadable history that only grows.
+    let attempt_ids: Vec<u64> = ctx
+        .db
+        .quiz_attempts()
+        .block_id()
+        .filter(block_id)
+        .map(|a| a.attempt_id)
+        .collect();
+    for attempt_id in attempt_ids {
+        ctx.db.quiz_attempts().attempt_id().delete(attempt_id);
+    }
 
     // Positions stay contiguous so `position` remains a usable sort key and the
     // next append does not reuse a number.
@@ -844,6 +885,10 @@ fn clear_quiz(ctx: &ReducerContext, block_id: u64) {
 /// reducer directly for every block in a locked book and unlock it one call at
 /// a time — the map is UX, this is the boundary.
 ///
+/// A `Quiz` block is refused outright: it completes only through `submit_quiz`,
+/// with a passing score. This reducer predates `BlockType::Quiz` and would
+/// otherwise be a one-call bypass of the entire release.
+///
 /// Nothing is recomputed *after* the write: chapter state is derived from
 /// `reader_progress` rather than stored, so the subscription that carries the
 /// new row is the same thing that moves the node on the map.
@@ -855,7 +900,10 @@ pub fn complete_block(ctx: &ReducerContext, block_id: u64) -> Result<(), String>
 
     let graph = graph_for_book(ctx, chapter.book_id);
     let progress = progress_for_reader(ctx, reader);
-    rules::can_complete_block(unlock::chapter_state(&graph, &progress, chapter.chapter_id))?;
+    rules::can_complete_block(
+        unlock::chapter_state(&graph, &progress, chapter.chapter_id),
+        block.block_type == BlockType::Quiz,
+    )?;
 
     if progress.has_completed(block_id) {
         return Ok(());
@@ -866,6 +914,120 @@ pub fn complete_block(ctx: &ReducerContext, block_id: u64) -> Result<(), String>
         block_id,
         completed_at: ctx.timestamp,
     });
+    Ok(())
+}
+
+/// One question's selections, as the reader submits them.
+///
+/// Questions the reader skipped may simply be absent; an absent question is
+/// wrong, not an error. See `rules::grade_quiz`.
+#[derive(SpacetimeType, Clone, Debug)]
+pub struct QuizAnswerInput {
+    pub question_id: u64,
+    pub selected_option_ids: Vec<u64>,
+}
+
+/// Grade a submission and, if it passes, complete the block.
+///
+/// This is the reducer v0.2 exists for. Everything the client sends is a claim
+/// about what it selected; everything about *correctness* is read here, from a
+/// table the client cannot subscribe to, and the only thing that travels back is
+/// a score. A client that lies about its selections gets an honest grade of the
+/// lie.
+///
+/// Retakes are unlimited and every attempt is recorded. A failing attempt after a
+/// passing one does not un-complete the block: completion is the presence of a
+/// `reader_progress` row, and taking it away would mean a reader could lose a
+/// chapter they had already earned by pressing a button. Best-of scoring is what
+/// that amounts to, and it is the deferred retake policy's only v0.2 position.
+///
+/// A `Quiz` block with no quiz configured is refused rather than treated as an
+/// empty pass. `create_block` will happily make one — the author sets the block
+/// type before writing the questions — so this state is normal and transient, and
+/// the safe reading of "no questions" is "not ready", never "you passed".
+#[spacetimedb::reducer]
+pub fn submit_quiz(
+    ctx: &ReducerContext,
+    block_id: u64,
+    answers: Vec<QuizAnswerInput>,
+) -> Result<(), String> {
+    let reader = ctx.sender();
+    let block = find_block(ctx, block_id)?;
+    if block.block_type != BlockType::Quiz {
+        return Err("That block is not a quiz.".to_string());
+    }
+    let chapter = find_chapter(ctx, block.chapter_id)?;
+
+    // The same gate `complete_block` uses, and for the same reason: a quiz inside
+    // a Blocked chapter is a chapter the reader has not reached.
+    let graph = graph_for_book(ctx, chapter.book_id);
+    let progress = progress_for_reader(ctx, reader);
+    rules::require_reachable_chapter(unlock::chapter_state(&graph, &progress, chapter.chapter_id))?;
+
+    let config = ctx
+        .db
+        .quiz_config()
+        .block_id()
+        .find(block_id)
+        .ok_or_else(|| "This quiz has not been written yet.".to_string())?;
+
+    let mut key: Vec<rules::QuestionKey> = ctx
+        .db
+        .quiz_questions()
+        .block_id()
+        .filter(block_id)
+        .map(|question| {
+            let option_ids: Vec<u64> = ctx
+                .db
+                .quiz_options()
+                .question_id()
+                .filter(question.question_id)
+                .map(|o| o.option_id)
+                .collect();
+            rules::QuestionKey {
+                question_id: question.question_id,
+                option_ids,
+                correct_option_ids: ctx
+                    .db
+                    .quiz_answer_key()
+                    .question_id()
+                    .filter(question.question_id)
+                    .map(|k| k.option_id)
+                    .collect(),
+            }
+        })
+        .collect();
+    // Filter order is not a guarantee, and `results` is per-question feedback the
+    // reader will read next to the questions as displayed.
+    key.sort_by_key(|q| q.question_id);
+
+    let submitted: Vec<rules::SubmittedAnswer> = answers
+        .into_iter()
+        .map(|a| rules::SubmittedAnswer {
+            question_id: a.question_id,
+            selected_option_ids: a.selected_option_ids,
+        })
+        .collect();
+
+    let grade = rules::grade_quiz(config.pass_threshold, &key, &submitted)?;
+
+    ctx.db.quiz_attempts().insert(QuizAttempt {
+        attempt_id: 0, // assigned by #[auto_inc]
+        identity: reader,
+        block_id,
+        score_percent: grade.score_percent,
+        passed: grade.passed,
+        submitted_at: ctx.timestamp,
+    });
+
+    if grade.passed && !progress.has_completed(block_id) {
+        ctx.db.reader_progress().insert(ReaderProgress {
+            progress_id: 0, // assigned by #[auto_inc]
+            identity: reader,
+            block_id,
+            completed_at: ctx.timestamp,
+        });
+    }
     Ok(())
 }
 

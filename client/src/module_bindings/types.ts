@@ -77,11 +77,27 @@ export const KnowledgeBlock = __t.object("KnowledgeBlock", {
 });
 export type KnowledgeBlock = __Infer<typeof KnowledgeBlock>;
 
+export const QuizAnswerInput = __t.object("QuizAnswerInput", {
+  questionId: __t.u64(),
+  selectedOptionIds: __t.array(__t.u64()),
+});
+export type QuizAnswerInput = __Infer<typeof QuizAnswerInput>;
+
 export const QuizAnswerKey = __t.object("QuizAnswerKey", {
   optionId: __t.u64(),
   questionId: __t.u64(),
 });
 export type QuizAnswerKey = __Infer<typeof QuizAnswerKey>;
+
+export const QuizAttempt = __t.object("QuizAttempt", {
+  attemptId: __t.u64(),
+  identity: __t.identity(),
+  blockId: __t.u64(),
+  scorePercent: __t.u32(),
+  passed: __t.bool(),
+  submittedAt: __t.timestamp(),
+});
+export type QuizAttempt = __Infer<typeof QuizAttempt>;
 
 export const QuizConfig = __t.object("QuizConfig", {
   blockId: __t.u64(),

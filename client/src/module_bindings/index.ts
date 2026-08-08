@@ -44,6 +44,7 @@ import PublishBookReducer from "./publish_book_reducer";
 import ReorderChaptersReducer from "./reorder_chapters_reducer";
 import SetChapterDepsReducer from "./set_chapter_deps_reducer";
 import SetQuizReducer from "./set_quiz_reducer";
+import SubmitQuizReducer from "./submit_quiz_reducer";
 import UpdateBlockReducer from "./update_block_reducer";
 import UpdateBookReducer from "./update_book_reducer";
 import UpdateChapterReducer from "./update_chapter_reducer";
@@ -55,6 +56,7 @@ import BooksRow from "./books_table";
 import ChapterDepsRow from "./chapter_deps_table";
 import ChaptersRow from "./chapters_table";
 import KnowledgeBlocksRow from "./knowledge_blocks_table";
+import QuizAttemptsRow from "./quiz_attempts_table";
 import QuizConfigRow from "./quiz_config_table";
 import QuizOptionsRow from "./quiz_options_table";
 import QuizQuestionsRow from "./quiz_questions_table";
@@ -124,6 +126,23 @@ const tablesSchema = __schema({
       { name: 'knowledge_blocks_block_id_key', constraint: 'unique', columns: ['blockId'] },
     ],
   }, KnowledgeBlocksRow),
+  quizAttempts: __table({
+    name: 'quiz_attempts',
+    indexes: [
+      { accessor: 'attempt_id', name: 'quiz_attempts_attempt_id_idx_btree', algorithm: 'btree', columns: [
+        'attemptId',
+      ] },
+      { accessor: 'block_id', name: 'quiz_attempts_block_id_idx_btree', algorithm: 'btree', columns: [
+        'blockId',
+      ] },
+      { accessor: 'identity', name: 'quiz_attempts_identity_idx_btree', algorithm: 'btree', columns: [
+        'identity',
+      ] },
+    ],
+    constraints: [
+      { name: 'quiz_attempts_attempt_id_key', constraint: 'unique', columns: ['attemptId'] },
+    ],
+  }, QuizAttemptsRow),
   quizConfig: __table({
     name: 'quiz_config',
     indexes: [
@@ -209,6 +228,7 @@ const reducersSchema = __reducers(
   __reducerSchema("reorder_chapters", ReorderChaptersReducer),
   __reducerSchema("set_chapter_deps", SetChapterDepsReducer),
   __reducerSchema("set_quiz", SetQuizReducer),
+  __reducerSchema("submit_quiz", SubmitQuizReducer),
   __reducerSchema("update_block", UpdateBlockReducer),
   __reducerSchema("update_book", UpdateBookReducer),
   __reducerSchema("update_chapter", UpdateChapterReducer),
@@ -224,6 +244,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "chapter_deps": Omit<typeof tablesSchema.schemaType.tables["chapterDeps"], "accessorName"> & { readonly accessorName: "chapter_deps" };
     /** @deprecated Use `knowledgeBlocks` instead. This alias will be removed in the next major version. */
     readonly "knowledge_blocks": Omit<typeof tablesSchema.schemaType.tables["knowledgeBlocks"], "accessorName"> & { readonly accessorName: "knowledge_blocks" };
+    /** @deprecated Use `quizAttempts` instead. This alias will be removed in the next major version. */
+    readonly "quiz_attempts": Omit<typeof tablesSchema.schemaType.tables["quizAttempts"], "accessorName"> & { readonly accessorName: "quiz_attempts" };
     /** @deprecated Use `quizConfig` instead. This alias will be removed in the next major version. */
     readonly "quiz_config": Omit<typeof tablesSchema.schemaType.tables["quizConfig"], "accessorName"> & { readonly accessorName: "quiz_config" };
     /** @deprecated Use `quizOptions` instead. This alias will be removed in the next major version. */
@@ -252,6 +274,7 @@ const REMOTE_MODULE = {
 const tableAccessorAliases = {
   "chapter_deps": "chapterDeps",
   "knowledge_blocks": "knowledgeBlocks",
+  "quiz_attempts": "quizAttempts",
   "quiz_config": "quizConfig",
   "quiz_options": "quizOptions",
   "quiz_questions": "quizQuestions",
@@ -280,6 +303,8 @@ export type DbView = __DbViewBase & {
   readonly "chapter_deps": __DbViewBase["chapterDeps"];
   /** @deprecated Use `knowledgeBlocks` instead. This alias will be removed in the next major version. */
   readonly "knowledge_blocks": __DbViewBase["knowledgeBlocks"];
+  /** @deprecated Use `quizAttempts` instead. This alias will be removed in the next major version. */
+  readonly "quiz_attempts": __DbViewBase["quizAttempts"];
   /** @deprecated Use `quizConfig` instead. This alias will be removed in the next major version. */
   readonly "quiz_config": __DbViewBase["quizConfig"];
   /** @deprecated Use `quizOptions` instead. This alias will be removed in the next major version. */
@@ -296,6 +321,8 @@ export type Tables = __TablesBase & {
   readonly "chapter_deps": __TablesBase["chapterDeps"];
   /** @deprecated Use `knowledgeBlocks` instead. This alias will be removed in the next major version. */
   readonly "knowledge_blocks": __TablesBase["knowledgeBlocks"];
+  /** @deprecated Use `quizAttempts` instead. This alias will be removed in the next major version. */
+  readonly "quiz_attempts": __TablesBase["quizAttempts"];
   /** @deprecated Use `quizConfig` instead. This alias will be removed in the next major version. */
   readonly "quiz_config": __TablesBase["quizConfig"];
   /** @deprecated Use `quizOptions` instead. This alias will be removed in the next major version. */

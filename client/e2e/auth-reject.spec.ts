@@ -4,7 +4,8 @@
  * `rules::require_owner` is unit-tested in Rust, but a unit test cannot notice the
  * call being *deleted* from a reducer — the rule keeps passing its own tests while
  * the door stands open. That is measured, not assumed: deleting the check from
- * `publish_book` leaves all 87 Rust tests green, and turns exactly one test here red.
+ * `publish_book` leaves the whole Rust suite green (87 tests when this was measured;
+ * it has grown since), and turns exactly one test here red.
  *
  * The shape that makes it real: each reducer is called twice with equally valid
  * arguments — once on a book this identity owns, once on the seeded demo book it
@@ -38,7 +39,13 @@ let conn: DbConnection;
 /** Ids in the seeded book, which this identity does not own. */
 let foreign: { bookId: bigint; chapterId: bigint; blockId: bigint };
 /** Ids in a book created by this identity, used as the positive control. */
-let own: { bookId: bigint; chapterId: bigint; laterChapterId: bigint; blockId: bigint };
+let own: {
+  bookId: bigint;
+  chapterId: bigint;
+  laterChapterId: bigint;
+  blockId: bigint;
+  quizBlockId: bigint;
+};
 
 function connect(): Promise<DbConnection> {
   return new Promise((resolve, reject) => {
@@ -83,11 +90,15 @@ function chapterIdsOf(bookId: bigint): bigint[] {
     .map((c) => c.chapterId);
 }
 
-async function createBlockIn(chapterId: bigint, title: string): Promise<bigint> {
+async function createBlockIn(
+  chapterId: bigint,
+  title: string,
+  kind: 'Reading' | 'Quiz' = 'Reading',
+): Promise<bigint> {
   await conn.reducers.createBlock({
     chapterId,
     title,
-    blockType: { tag: 'Reading' },
+    blockType: { tag: kind },
     bodyHtml: '<p>A block that exists so it can be written to.</p>',
     url: undefined,
     isOptional: false,
@@ -167,6 +178,10 @@ test.beforeAll(async () => {
     chapterId,
     laterChapterId,
     blockId: await createBlockIn(chapterId, 'Control block'),
+    // `set_quiz` refuses a block that is not a Quiz, so its positive control
+    // needs one of the right type — otherwise the "allowed" half would fail on
+    // the block type and prove nothing about ownership.
+    quizBlockId: await createBlockIn(chapterId, 'Control quiz block', 'Quiz'),
   };
 });
 
@@ -313,6 +328,30 @@ test('update_block is refused for a non-owner', async () => {
       isOptional: false,
     }),
   );
+  expect(refusal).toContain(REFUSAL);
+});
+
+test('set_quiz is refused for a non-owner', async () => {
+  // The tenth owner-gated reducer. `require_owner` runs before the block-type
+  // check, so pointing this at the seeded book's Reading block still exercises
+  // ownership rather than tripping over the type — and the positive control on a
+  // real Quiz block is what proves the arguments themselves are good.
+  const quiz = {
+    passThreshold: 50,
+    questions: [
+      {
+        promptHtml: 'Who may write this quiz?',
+        options: [
+          { textHtml: 'Its owner', isCorrect: true },
+          { textHtml: 'Anyone at all', isCorrect: false },
+        ],
+      },
+    ],
+  };
+
+  await conn.reducers.setQuiz({ blockId: own.quizBlockId, ...quiz });
+
+  const refusal = await refusalFrom(conn.reducers.setQuiz({ blockId: foreign.blockId, ...quiz }));
   expect(refusal).toContain(REFUSAL);
 });
 

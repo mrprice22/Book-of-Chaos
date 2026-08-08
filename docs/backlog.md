@@ -222,7 +222,7 @@ authorization test that has never been seen to fail is not evidence.
       proven while no reducer can write a row. Once `set_quiz` can, author a quiz
       through it and assert the client still sees zero correct answers — the
       row-level half of the same claim
-- [ ] **M10.3** `submit_quiz` reducer — grades server-side, writes a `quiz_attempts` row,
+- [x] **M10.3** `submit_quiz` reducer — grades server-side, writes a `quiz_attempts` row,
       and completes the block only when score ≥ threshold. Refuses submission for a
       Blocked chapter, exactly as `complete_block` does.
       **Close the hole M10.1 opened first, before writing `submit_quiz`.**
@@ -236,7 +236,19 @@ authorization test that has never been seen to fail is not evidence.
       `auth-reject.spec.ts` or its own harness so a live client is seen being
       refused. Adding `submit_quiz` without this leaves two doors and gates one.
       Also decide what a `Quiz` block with **no quiz configured** does: `create_block`
-      and `update_block` both happily produce one, so `submit_quiz` will meet it
+      and `update_block` both happily produce one, so `submit_quiz` will meet it.
+      **Decided:** refused — `"This quiz has not been written yet."` — and
+      `complete_block` still refuses it as a quiz, so an unwritten quiz is not a
+      way back to "Mark as complete". The safe reading of "no questions" is "not
+      ready", never "you passed". Both doors are watched by the new `quiz-gate`
+      verify stage, a reader-side twin of `auth-reject`: nine live-client cases,
+      each refusal with a positive control. Watched failing before being trusted —
+      forcing `complete_block`'s quiz argument to `false` turns exactly the two
+      "refused for a quiz block" cases red, and dropping `grade.passed` from the
+      completion condition turns the two failing-attempt cases red, while every
+      control stays green. Also folded in: `set_quiz` was the **tenth**
+      owner-gated reducer and `auth-reject` did not cover it, so M9.1's guarantee
+      had a door in it. It does now
 - [ ] **M10.4** Table-driven grading tests: all correct, all wrong, exactly at threshold,
       one mark below, multi-answer with a subset selected, unknown option id, submission
       to a block that is not a Quiz, and resubmission after an earlier pass
@@ -258,7 +270,16 @@ these is not an option.
       rejects is a bug the reader gets to discover. `is_multi_answer` on the question
       decides radio group versus checkbox group; it is the only fact about the answer
       key the client is given, and it exists for exactly this. A Quiz block whose
-      quiz has not been configured yet needs a defined rendering too — see M10.3
+      quiz has not been configured yet needs a defined rendering too — see M10.3.
+      **"Which questions were wrong" has no server surface yet.** `submit_quiz`
+      grades per question — `rules::Grade::results` — but M10.3 stored only the
+      verdict: `quiz_attempts` holds the score and pass/fail and nothing about the
+      selections, deliberately, so a public table cannot become an oblique copy of
+      the answer key. Per-question feedback therefore needs a table this task adds,
+      and it is worth thinking about *what* it stores: "question 3 was correct",
+      accumulated across unlimited retakes, is the key for a single-answer question
+      after a couple of attempts. That is inherent to giving feedback at all, not a
+      reason to skip it — but it should be a decision rather than a side effect
 - [ ] **M11.2** Failing shows the score and a retry; passing completes the block and the
       map node changes state live, with no reload
 - [ ] **M11.3** Author quiz form — add/remove questions and options, mark correct answers,
@@ -349,8 +370,9 @@ them.** The three v0.1 entries that used to live here became M9.
   fact.
 
 - **The e2e harnesses leave junk books in the local database, forever.**
-  `auth-reject` creates and *publishes* a control book on every run, and
-  `answer-key` creates a Draft one, into `.devhome/spacetime-data` — which persists
+  `auth-reject` creates and *publishes* a control book on every run, `answer-key`
+  creates a Draft one, and since M10.3 `quiz-gate` creates a third — three books
+  per run now, into `.devhome/spacetime-data`, which persists
   between runs by design since M9.6. CI is unaffected (it starts empty), but a
   developer's local reader library fills up with "Authorization control
   1754…" over time, and the smoke test's assertions are one accumulated
