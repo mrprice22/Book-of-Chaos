@@ -1,7 +1,13 @@
 import { useState } from 'react';
 import { t } from '../i18n';
+import type { MessageKey } from '../i18n';
 import { answersFrom, wasWrong } from './quizModel';
-import type { QuizAnswer, QuizQuestionView, QuizView } from './quizModel';
+import type {
+  QuizAnswer,
+  QuizAttemptView,
+  QuizQuestionView,
+  QuizView,
+} from './quizModel';
 
 export type QuizBlockProps = {
   /** `undefined` when the block is a Quiz but nobody has written the quiz yet. */
@@ -29,6 +35,12 @@ function toggle(
   else chosen.add(optionId);
   next.set(question.questionId, chosen);
   return next;
+}
+
+/** What the one submit control says, given what the reader's last attempt did. */
+function submitLabel(attempt: QuizAttemptView | undefined): MessageKey {
+  if (!attempt) return 'quiz.submit';
+  return attempt.passed ? 'quiz.retake' : 'quiz.retry';
 }
 
 /**
@@ -114,7 +126,10 @@ export function QuizBlock({ quiz, onSubmit }: QuizBlockProps) {
         );
       })}
 
-      <button type="submit">{t('quiz.submit')}</button>
+      {/* The retry is the same control relabelled, not a second one: a reader who
+          failed needs to be told they may go again, and a reader who passed needs
+          to know a retake will not cost them the completion they have. */}
+      <button type="submit">{t(submitLabel(attempt))}</button>
     </form>
   );
 }

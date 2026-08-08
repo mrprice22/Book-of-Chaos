@@ -310,8 +310,24 @@ these is not an option.
       the same thing whichever way round it is. Watched failing before being
       trusted: writing no result rows turns that case red on the breakdown while
       the score assertion beside it stays green
-- [ ] **M11.2** Failing shows the score and a retry; passing completes the block and the
-      map node changes state live, with no reload
+- [x] **M11.2** Failing shows the score and a retry; passing completes the block and the
+      map node changes state live, with no reload.
+      The retry is the submit control relabelled rather than a second button:
+      `Submit answers` → `Try again` after a failure, `Take it again` after a pass,
+      because a pass is not undone by a later failure and the control should not
+      imply it might. The live half needed no new machinery — `submit_quiz` writes
+      the same `reader_progress` row `complete_block` does, so the map was already
+      right — but "already right" is not evidence, so it now has a `BookMap` test
+      that passes a Quiz block and watches the downstream node go blocked →
+      available across a re-render with no refetch, and a `ChapterScreen` test that
+      does the same for the block itself from an attempt row arriving. Also fixed
+      on the way: a refused submission was reported as `block.completeFailed`
+      — "Could not mark that complete" — which is the one sentence the reader must
+      not read about a quiz. `ChapterView`'s `error` prop now carries which call
+      was refused rather than a finished sentence, so the copy stays in the view.
+      The `ChapterScreen` fake had to learn to tell the two reducers apart; it keys
+      them by `accessorName`, with a control test on the names, because a wrong key
+      would have made every reducer call throw rather than quietly pass
 - [ ] **M11.3** Author quiz form — add/remove questions and options, mark correct answers,
       set the pass threshold. Server rejections surfaced as readable errors, the way M7.2
       surfaced cycle rejection. `BlockForm`'s `TYPES` array is a hand-written

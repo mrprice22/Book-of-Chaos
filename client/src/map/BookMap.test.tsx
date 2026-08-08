@@ -160,6 +160,30 @@ describe('BookMap live updates', () => {
     expect(lastSource()).toContain('class c1 complete');
   });
 
+  it('unlocks a downstream node when a quiz is passed, with no reload', async () => {
+    // The v0.2 Definition of Done, item 4. Nothing about the map knows a quiz from
+    // a reading block — `submit_quiz` writes the same `reader_progress` row — and
+    // that is the point: the gate moved to the server, not into the map.
+    sdk.rows = {
+      ...sdk.rows,
+      knowledgeBlocks: [
+        aBlock({ blockId: 10n, chapterId: 1n, blockType: { tag: 'Quiz' } }),
+        aBlock({ blockId: 20n, chapterId: 2n }),
+      ],
+    };
+    const { rerender } = render(<BookMap bookId={1n} />);
+    await waitFor(() => expect(mermaidMock.render).toHaveBeenCalled());
+    expect(lastSource()).toContain('class c2 blocked');
+
+    sdk.rows = {
+      ...sdk.rows,
+      readerProgress: [someProgress({ identity: READER, blockId: 10n })],
+    };
+    rerender(<BookMap bookId={1n} />);
+
+    await waitFor(() => expect(lastSource()).toContain('class c2 available'));
+  });
+
   it('redraws when an author adds a chapter', async () => {
     const { rerender } = render(<BookMap bookId={1n} />);
     await waitFor(() => expect(mermaidMock.render).toHaveBeenCalled());

@@ -13,7 +13,12 @@ export type ChapterViewProps = {
   quizzes: ReadonlyMap<bigint, QuizView>;
   onSubmitQuiz: (blockId: bigint, answers: QuizAnswer[]) => void;
   onBack: () => void;
-  error?: string;
+  /**
+   * A rejection from the server, and which call it came from. Carried as a fact
+   * rather than a finished sentence so the copy stays in this file — "could not
+   * mark that complete" is the wrong thing to say about a refused submission.
+   */
+  error?: { readonly kind: 'complete' | 'submit'; readonly reason: string };
 };
 
 function BlockBody({ block }: { block: KnowledgeBlock }) {
@@ -58,7 +63,9 @@ export function ChapterView({
 
       {error !== undefined && (
         <p className="error" role="alert">
-          {t('block.completeFailed', { reason: error })}
+          {t(error.kind === 'submit' ? 'quiz.submitFailed' : 'block.completeFailed', {
+            reason: error.reason,
+          })}
         </p>
       )}
 

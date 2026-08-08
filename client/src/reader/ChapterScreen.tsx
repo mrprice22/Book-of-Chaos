@@ -4,6 +4,7 @@ import { reducers, tables } from '../module_bindings';
 import { t } from '../i18n';
 import { HOME_PATH, navigate } from '../routing/route';
 import { ChapterView } from './ChapterView';
+import type { ChapterViewProps } from './ChapterView';
 import { buildGraph, chapterState } from './chapterState';
 import { buildQuiz } from './quizModel';
 import type { QuizAnswer, QuizView } from './quizModel';
@@ -19,7 +20,11 @@ function BackToBook({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Live data for one chapter, plus the one write the reader can make. */
+function reasonFrom(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/** Live data for one chapter, plus the two writes the reader can make. */
 export function ChapterScreen({ chapterId }: { chapterId: bigint }) {
   const { identity } = useSpacetimeDB();
   const [chapters, chaptersReady] = useTable(tables.chapters);
@@ -33,7 +38,7 @@ export function ChapterScreen({ chapterId }: { chapterId: bigint }) {
   const [quizResults] = useTable(tables.quizAttemptResults);
   const completeBlock = useReducer(reducers.completeBlock);
   const submitQuiz = useReducer(reducers.submitQuiz);
-  const [error, setError] = useState<string | undefined>(undefined);
+  const [error, setError] = useState<ChapterViewProps['error']>(undefined);
 
   if (!chaptersReady || !blocksReady || !depsReady) {
     return <p className="chapter-status">{t('book.loading')}</p>;
@@ -81,7 +86,7 @@ export function ChapterScreen({ chapterId }: { chapterId: bigint }) {
     // The reducer refuses a Blocked chapter, so a rejection here is authoritative
     // and worth showing rather than swallowing.
     completeBlock({ blockId }).catch((e: unknown) => {
-      setError(e instanceof Error ? e.message : String(e));
+      setError({ kind: 'complete', reason: reasonFrom(e) });
     });
   };
 
@@ -90,7 +95,7 @@ export function ChapterScreen({ chapterId }: { chapterId: bigint }) {
     // Grading is the server's, and so is the verdict: nothing is decided here.
     // The score comes back as a `quiz_attempts` row through the subscription.
     submitQuiz({ blockId, answers }).catch((e: unknown) => {
-      setError(e instanceof Error ? e.message : String(e));
+      setError({ kind: 'submit', reason: reasonFrom(e) });
     });
   };
 

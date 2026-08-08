@@ -1,7 +1,16 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Identity, getQueryAccessorName } from 'spacetimedb';
-import { aBlock, aChapter, someProgress } from '../test/factories';
+import {
+  aBlock,
+  aChapter,
+  anAttempt,
+  anOption,
+  aQuestion,
+  aQuizConfig,
+  aResult,
+  someProgress,
+} from '../test/factories';
 import { ChapterScreen } from './ChapterScreen';
 
 const READER = Identity.fromString('a11ce'.padStart(64, '0'));
@@ -13,7 +22,9 @@ const sdk = vi.hoisted(() => ({
   ready: true,
   rows: {} as Record<string, readonly unknown[]>,
   identity: undefined as unknown,
-  completeBlock: undefined as unknown,
+  // Keyed by accessor name, because the screen now calls two reducers and a
+  // single shared spy could not tell "submitted a quiz" from "clicked complete".
+  reducers: {} as Record<string, unknown>,
 }));
 
 vi.mock('spacetimedb/react', async () => {
@@ -22,15 +33,43 @@ vi.mock('spacetimedb/react', async () => {
   return {
     useSpacetimeDB: () => ({ identity: sdk.identity }),
     useTable: (query: unknown) => [sdk.rows[accessorName(query)] ?? [], sdk.ready],
-    useReducer: () => sdk.completeBlock,
+    useReducer: (reducer: { accessorName: string }) => sdk.reducers[reducer.accessorName],
   };
 });
+
+/** Add a written Quiz block (101) to the chapter alongside the reading block. */
+function quizRows() {
+  sdk.rows = {
+    ...sdk.rows,
+    knowledgeBlocks: [
+      aBlock({ blockId: 100n, chapterId: 10n, title: 'Intro' }),
+      aBlock({
+        blockId: 101n,
+        chapterId: 10n,
+        title: 'The quiz',
+        position: 1,
+        blockType: { tag: 'Quiz' },
+      }),
+    ],
+    quizConfig: [aQuizConfig({ blockId: 101n, passThreshold: 100 })],
+    quizQuestions: [aQuestion({ questionId: 200n, blockId: 101n })],
+    quizOptions: [
+      anOption({ optionId: 300n, questionId: 200n, textHtml: 'The server', position: 0 }),
+      anOption({ optionId: 301n, questionId: 200n, textHtml: 'The client', position: 1 }),
+    ],
+    quizAttempts: [],
+    quizAttemptResults: [],
+  };
+}
 
 describe('ChapterScreen', () => {
   beforeEach(() => {
     sdk.ready = true;
     sdk.identity = READER;
-    sdk.completeBlock = vi.fn(() => Promise.resolve());
+    sdk.reducers = {
+      completeBlock: vi.fn(() => Promise.resolve()),
+      submitQuiz: vi.fn(() => Promise.resolve()),
+    };
     sdk.rows = {
       chapters: [aChapter({ chapterId: 10n, title: 'Attractors' })],
       knowledgeBlocks: [aBlock({ blockId: 100n, chapterId: 10n, title: 'Intro' })],
@@ -72,7 +111,7 @@ describe('ChapterScreen', () => {
   it('calls the reducer with the block id', async () => {
     render(<ChapterScreen chapterId={10n} />);
     await userEvent.click(screen.getByRole('button', { name: /mark as complete/i }));
-    expect(sdk.completeBlock).toHaveBeenCalledWith({ blockId: 100n });
+    expect(sdk.reducers.completeBlock).toHaveBeenCalledWith({ blockId: 100n });
   });
 
   it('reflects a completion that arrives over the subscription, with no refetch', () => {
@@ -143,8 +182,98 @@ describe('ChapterScreen', () => {
     expect(screen.queryByText(/locked/i)).not.toBeInTheDocument();
   });
 
+  it('submits a quiz through submit_quiz, never through complete_block', async () => {
+    quizRows();
+    render(<ChapterScreen chapterId={10n} />);
+    await userEvent.click(screen.getByRole('radio', { name: 'The server' }));
+    await userEvent.click(screen.getByRole('button', { name: /submit answers/i }));
+    expect(sdk.reducers.submitQuiz).toHaveBeenCalledWith({
+      blockId: 101n,
+      answers: [{ questionId: 200n, selectedOptionIds: [300n] }],
+    });
+    expect(sdk.reducers.completeBlock).not.toHaveBeenCalled();
+  });
+
+  it('shows a failing score and an invitation to retry, arriving over the subscription', () => {
+    quizRows();
+    const { rerender } = render(<ChapterScreen chapterId={10n} />);
+    expect(screen.getByRole('button', { name: /submit answers/i })).toBeInTheDocument();
+
+    // The reducer graded and wrote the rows; the subscription delivers them.
+    // Nothing in the component asked for the score.
+    sdk.rows = {
+      ...sdk.rows,
+      quizAttempts: [anAttempt({ attemptId: 400n, identity: READER, blockId: 101n })],
+      quizAttemptResults: [aResult({ attemptId: 400n, questionId: 200n })],
+    };
+    rerender(<ChapterScreen chapterId={10n} />);
+
+    expect(screen.getByRole('status')).toHaveTextContent('0%');
+    expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument();
+    expect(screen.queryByText(/^Completed$/)).not.toBeInTheDocument();
+  });
+
+  it('completes the block when a passing attempt arrives, with no reload', () => {
+    quizRows();
+    const { rerender } = render(<ChapterScreen chapterId={10n} />);
+
+    sdk.rows = {
+      ...sdk.rows,
+      quizAttempts: [
+        anAttempt({
+          attemptId: 400n,
+          identity: READER,
+          blockId: 101n,
+          scorePercent: 100,
+          passed: true,
+        }),
+      ],
+      quizAttemptResults: [
+        aResult({ attemptId: 400n, questionId: 200n, isCorrect: true }),
+      ],
+      // `submit_quiz` writes progress in the same transaction as the attempt.
+      readerProgress: [someProgress({ identity: READER, blockId: 101n })],
+    };
+    rerender(<ChapterScreen chapterId={10n} />);
+
+    expect(screen.getByText(/completed/i)).toBeInTheDocument();
+    // Still retakeable — unlimited retakes, and a pass is not undone by a later fail.
+    expect(screen.getByRole('button', { name: /take it again/i })).toBeInTheDocument();
+  });
+
+  it('does not read another reader’s attempt as this reader’s score', () => {
+    quizRows();
+    sdk.rows = {
+      ...sdk.rows,
+      quizAttempts: [
+        anAttempt({
+          identity: OTHER_READER,
+          blockId: 101n,
+          scorePercent: 100,
+          passed: true,
+        }),
+      ],
+    };
+    render(<ChapterScreen chapterId={10n} />);
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('says a refused submission was refused, not that a completion failed', async () => {
+    quizRows();
+    sdk.reducers.submitQuiz = vi.fn(() =>
+      Promise.reject(new Error('This quiz has not been written yet.')),
+    );
+    render(<ChapterScreen chapterId={10n} />);
+    await userEvent.click(screen.getByRole('button', { name: /submit answers/i }));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Could not submit that');
+    expect(alert).not.toHaveTextContent('mark that complete');
+  });
+
   it('shows a rejected completion instead of swallowing it', async () => {
-    sdk.completeBlock = vi.fn(() => Promise.reject(new Error('Chapter is blocked')));
+    sdk.reducers.completeBlock = vi.fn(() =>
+      Promise.reject(new Error('Chapter is blocked')),
+    );
     render(<ChapterScreen chapterId={10n} />);
     await userEvent.click(screen.getByRole('button', { name: /mark as complete/i }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Chapter is blocked');
@@ -158,5 +287,19 @@ describe('the fake subscription', () => {
     expect(getQueryAccessorName(tables.knowledgeBlocks)).toBe('knowledgeBlocks');
     expect(getQueryAccessorName(tables.readerProgress)).toBe('readerProgress');
     expect(getQueryAccessorName(tables.chapterDeps)).toBe('chapterDeps');
+    expect(getQueryAccessorName(tables.quizConfig)).toBe('quizConfig');
+    expect(getQueryAccessorName(tables.quizQuestions)).toBe('quizQuestions');
+    expect(getQueryAccessorName(tables.quizOptions)).toBe('quizOptions');
+    expect(getQueryAccessorName(tables.quizAttempts)).toBe('quizAttempts');
+    expect(getQueryAccessorName(tables.quizAttemptResults)).toBe('quizAttemptResults');
+  });
+
+  it('keys reducers by the names the screen looks them up under', async () => {
+    // The control for the reducer fake: if these names were wrong, every
+    // `useReducer` above would resolve to `undefined` and the calls would throw
+    // rather than quietly pass.
+    const { reducers } = await import('../module_bindings');
+    expect(reducers.completeBlock.accessorName).toBe('completeBlock');
+    expect(reducers.submitQuiz.accessorName).toBe('submitQuiz');
   });
 });

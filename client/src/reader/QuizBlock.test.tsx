@@ -163,10 +163,17 @@ describe('QuizBlock', () => {
     expect(screen.getAllByText(/got this one right/i)).toHaveLength(1);
   });
 
+  it('invites a retry after a failing attempt', () => {
+    renderQuiz(aQuizView({ latestAttempt: anAttemptView() }));
+    expect(screen.getByRole('button', { name: /try again/i })).toBeEnabled();
+  });
+
   it('keeps the form usable after a passing attempt, because retakes are unlimited', () => {
+    // Relabelled rather than removed: a pass is not undone by a later failure, so
+    // going again costs the reader nothing, and the button should not imply it does.
     renderQuiz(
       aQuizView({ latestAttempt: anAttemptView({ scorePercent: 100, passed: true }) }),
     );
-    expect(screen.getByRole('button', { name: /submit/i })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /take it again/i })).toBeEnabled();
   });
 });

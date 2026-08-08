@@ -108,8 +108,15 @@ describe('ChapterView', () => {
   });
 
   it('surfaces a rejection from the server as an alert', () => {
-    renderView({ error: 'Chapter is blocked' });
+    renderView({ error: { kind: 'complete', reason: 'Chapter is blocked' } });
     expect(screen.getByRole('alert')).toHaveTextContent('Chapter is blocked');
+    expect(screen.getByRole('alert')).toHaveTextContent(/mark that complete/i);
+  });
+
+  it('does not describe a refused submission as a failed completion', () => {
+    renderView({ error: { kind: 'submit', reason: 'This quiz has no questions.' } });
+    expect(screen.getByRole('alert')).toHaveTextContent('This quiz has no questions.');
+    expect(screen.getByRole('alert')).not.toHaveTextContent(/mark that complete/i);
   });
 
   it('offers no "Mark as complete" on a quiz block, and shows the quiz instead', async () => {
