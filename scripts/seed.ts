@@ -24,6 +24,16 @@ const URI = process.env.SPACETIME_URI ?? 'ws://localhost:3000';
 const DB_NAME = process.env.SPACETIME_DB_NAME ?? 'book-of-chaos';
 
 const BOOK_TITLE = 'Chaos, Briefly';
+/** Named because the idempotency check looks for it by title. */
+const QUIZ_BLOCK_TITLE = 'Check yourself';
+
+type QuizSpec = {
+  passThreshold: number;
+  questions: {
+    promptHtml: string;
+    options: { textHtml: string; isCorrect: boolean }[];
+  }[];
+};
 
 type BlockSpec = {
   title: string;
@@ -31,6 +41,8 @@ type BlockSpec = {
   blockType?: BlockType;
   url?: string;
   isOptional?: boolean;
+  /** Only on a `Quiz` block: written with `set_quiz` after the block exists. */
+  quiz?: QuizSpec;
 };
 
 type ChapterSpec = {
@@ -59,6 +71,39 @@ const CHAPTERS: ChapterSpec[] = [
         title: 'Sensitive dependence',
         bodyHtml:
           '<h2>Sensitive dependence</h2><p>Two states that begin arbitrarily close together can end up arbitrarily far apart. Prediction fails not because the rule is unknown, but because your knowledge of the starting point is finite.</p><ul><li>The rule is deterministic.</li><li>The outcome is unforecastable.</li><li>Both statements are true at once.</li></ul>',
+      },
+      {
+        // The gate the whole of v0.2 exists for: Foundations is the root of the
+        // graph, so nothing downstream opens until this is passed. One
+        // single-answer question and one multi-answer one, because those are two
+        // different controls and only a browser proves both work.
+        title: QUIZ_BLOCK_TITLE,
+        bodyHtml:
+          '<h2>Before you go on</h2><p>Both questions, both right. The grading happens on the server.</p>',
+        blockType: { tag: 'Quiz' },
+        quiz: {
+          passThreshold: 100,
+          questions: [
+            {
+              promptHtml: '<p>What makes a chaotic system unpredictable?</p>',
+              options: [
+                {
+                  textHtml: 'Sensitive dependence on initial conditions',
+                  isCorrect: true,
+                },
+                { textHtml: 'Randomness in the rule itself', isCorrect: false },
+              ],
+            },
+            {
+              promptHtml: '<p>Which of these are true of a strange attractor?</p>',
+              options: [
+                { textHtml: 'Trajectories stay inside it', isCorrect: true },
+                { textHtml: 'Trajectories never repeat inside it', isCorrect: true },
+                { textHtml: 'It is a single fixed point', isCorrect: false },
+              ],
+            },
+          ],
+        },
       },
     ],
   },
@@ -183,6 +228,73 @@ async function waitFor<T>(find: () => T | undefined, what: string): Promise<T> {
   throw new Error(`Gave up waiting for ${what}`);
 }
 
+/** Create one block, and write its quiz if it has one. */
+async function addBlock(
+  conn: DbConnection,
+  chapterId: bigint,
+  block: BlockSpec,
+): Promise<void> {
+  await conn.reducers.createBlock({
+    chapterId,
+    title: block.title,
+    blockType: block.blockType ?? { tag: 'Reading' },
+    bodyHtml: block.bodyHtml,
+    url: block.url,
+    isOptional: block.isOptional ?? false,
+  });
+  const created = await waitFor(
+    () =>
+      [...conn.db.knowledgeBlocks.iter()].find(
+        (b) => b.chapterId === chapterId && b.title === block.title,
+      ),
+    `block "${block.title}"`,
+  );
+  console.log(`    block: ${block.title}`);
+
+  if (!block.quiz) return;
+  // A separate reducer because the answer key cannot travel on `create_block`:
+  // correctness is written into a non-public table, which only `set_quiz` touches.
+  await conn.reducers.setQuiz({ blockId: created.blockId, ...block.quiz });
+  await waitFor(() => {
+    const written = [...conn.db.quizQuestions.iter()].filter(
+      (q) => q.blockId === created.blockId,
+    );
+    return written.length === block.quiz?.questions.length ? written : undefined;
+  }, `the quiz on "${block.title}"`);
+  console.log(`      quiz: ${String(block.quiz.questions.length)} questions`);
+}
+
+/**
+ * Refuse to run against a demo book that predates the quiz.
+ *
+ * The book seeded before v0.2 has no `Check yourself` block, so the smoke test's
+ * fail-then-pass path would fail on a control that is not there — a red gate whose
+ * cause is nowhere in the failure. Adding the missing block in place is not an
+ * option: this script connects anonymously and gets a fresh identity every run, so
+ * it does not own the book a previous run created, and `create_block` answers
+ * "Only the owner of this book can change it."
+ *
+ * CI never meets this, because it starts with an empty database. A developer's
+ * machine does, because `.devhome/spacetime-data` persists by design (M9.6).
+ */
+function requireCurrentSeed(conn: DbConnection, bookId: bigint): void {
+  const foundations = [...conn.db.chapters.iter()].find(
+    (c) => c.bookId === bookId && c.title === 'Foundations',
+  );
+  const hasQuiz =
+    foundations !== undefined &&
+    [...conn.db.knowledgeBlocks.iter()].some(
+      (b) => b.chapterId === foundations.chapterId && b.title === QUIZ_BLOCK_TITLE,
+    );
+  if (hasQuiz) return;
+
+  throw new Error(
+    `"${BOOK_TITLE}" (book ${String(bookId)}) was seeded before the quiz block existed, ` +
+      'and this script cannot add it: it connects anonymously, so it does not own ' +
+      'that book. Re-seed with:\n\n  ./scripts/deploy.sh local --clear\n',
+  );
+}
+
 async function main() {
   const conn = await connect();
   await conn.subscriptionBuilder().subscribeToAllTables();
@@ -190,6 +302,7 @@ async function main() {
 
   const existing = [...conn.db.books.iter()].find((b) => b.title === BOOK_TITLE);
   if (existing) {
+    requireCurrentSeed(conn, existing.bookId);
     console.log(
       `"${BOOK_TITLE}" is already seeded (book ${existing.bookId}). Nothing to do.`,
     );
@@ -229,22 +342,7 @@ async function main() {
     console.log(`  chapter ${chapter.chapterId}: ${chapter.title}`);
 
     for (const block of spec.blocks) {
-      await conn.reducers.createBlock({
-        chapterId: chapter.chapterId,
-        title: block.title,
-        blockType: block.blockType ?? { tag: 'Reading' },
-        bodyHtml: block.bodyHtml,
-        url: block.url,
-        isOptional: block.isOptional ?? false,
-      });
-      await waitFor(
-        () =>
-          [...conn.db.knowledgeBlocks.iter()].find(
-            (b) => b.chapterId === chapter.chapterId && b.title === block.title,
-          ),
-        `block "${block.title}"`,
-      );
-      console.log(`    block: ${block.title}`);
+      await addBlock(conn, chapter.chapterId, block);
     }
   }
 

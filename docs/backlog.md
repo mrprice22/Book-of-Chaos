@@ -353,8 +353,22 @@ these is not an option.
       replace. No client-side validation either: `rules::validate_quiz` is the
       trust boundary, and a second copy of its rules in the browser is a thing to
       keep in sync. A blank threshold is sent as 0 and the server names it
-- [ ] **M11.4** Extend the Playwright smoke test to cover fail-then-pass: submit a wrong
-      answer, assert still locked, submit a right one, assert unlocked
+- [x] **M11.4** Extend the Playwright smoke test to cover fail-then-pass: submit a wrong
+      answer, assert still locked, submit a right one, assert unlocked.
+      The quiz went into **Foundations**, the root of the demo graph, so the whole
+      book is now behind an earned unlock rather than a self-report — which also
+      makes the existing two-tab test item 4 of the v0.2 Definition of Done
+      verbatim: the watcher tab sees the map open because a quiz was *passed*.
+      One single-answer and one multi-answer question, because a radio group and a
+      checkbox group are different controls and only a browser proves both.
+      A wrinkle worth recording: the seed is idempotent by book title, and
+      `.devhome/spacetime-data` persists between runs by design (M9.6), so a
+      developer's demo book predates the quiz. The seeder cannot repair it — it
+      connects anonymously and gets a fresh identity every run, so it does not own
+      the book a previous run created, and `create_block` answers "Only the owner
+      of this book can change it." It therefore refuses with a message naming
+      `./scripts/deploy.sh local --clear`, rather than letting the smoke test fail
+      on a control that is not there. CI never meets this; it starts empty
 
 **Acceptance:** a quiz can be authored and passed entirely through the UI, and the answer
 key never appears in the page source or in any subscription the client holds.

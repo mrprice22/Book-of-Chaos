@@ -53,6 +53,48 @@ async function pageWasNotReloaded(page: Page) {
   );
 }
 
+/** The seeded quiz on Foundations. The harness knows which is which; a reader would not. */
+const RIGHT_ANSWERS = [
+  'Sensitive dependence on initial conditions',
+  'Trajectories stay inside it',
+  'Trajectories never repeat inside it',
+];
+const WRONG_ANSWERS = ['Randomness in the rule itself', 'It is a single fixed point'];
+
+/**
+ * Answer the seeded quiz and submit it.
+ *
+ * Both controls are exercised: question one is a radio group and question two a
+ * checkbox group, chosen by `is_multi_answer`. Only a browser can confirm that a
+ * radio replaces and a checkbox accumulates.
+ */
+async function answerQuiz(page: Page, how: 'right' | 'wrong') {
+  const wanted = how === 'right' ? RIGHT_ANSWERS : WRONG_ANSWERS;
+  for (const label of wanted) {
+    await page.getByLabel(label).check();
+  }
+  // The whole answer sheet, not just the ticks: a checkbox left over from an
+  // earlier attempt would quietly turn a "right" submission into a wrong one.
+  // Radios need no undoing — checking the other option in the group does it.
+  for (const label of [...RIGHT_ANSWERS, ...WRONG_ANSWERS]) {
+    if (wanted.includes(label)) continue;
+    const control = page.getByLabel(label);
+    if ((await control.getAttribute('type')) === 'checkbox' && (await control.isChecked())) {
+      await control.uncheck();
+    }
+  }
+  await page
+    .getByRole('button', { name: /Submit answers|Try again|Take it again/ })
+    .click();
+}
+
+/** Everything in Foundations: two readings, then the quiz, passed. */
+async function finishFoundations(page: Page) {
+  await completeEveryBlock(page);
+  await answerQuiz(page, 'right');
+  await expect(page.getByText('Passed.')).toBeVisible();
+}
+
 async function completeEveryBlock(page: Page) {
   const button = page.getByRole('button', { name: 'Mark as complete' });
   for (let remaining = await button.count(); remaining > 0; remaining--) {
@@ -113,7 +155,7 @@ test('completing a chapter unlocks what depends on it', async ({ page }) => {
   await connected(page);
 
   await mapNode(page, 'Foundations').click();
-  await completeEveryBlock(page);
+  await finishFoundations(page);
   await page.getByRole('button', { name: 'Back to the book' }).click();
 
   // No reload anywhere in this test: the map redraws from the subscription.
@@ -133,13 +175,47 @@ test('two tabs on one identity stay in sync without a reload', async ({ page, co
   await connected(watcher);
   await expect(mapNode(watcher, 'Foundations')).toContainText('○');
 
-  await completeEveryBlock(page);
+  await finishFoundations(page);
 
   // `watcher` is never touched again — no goto, no reload, no click.
   await expect(mapNode(watcher, 'Foundations')).toContainText('✓');
   await expect(mapNode(watcher, 'Attractors')).toContainText('○');
 
   await watcher.close();
+});
+
+test('a quiz is failed, then passed, and only then does the chapter unlock', async ({
+  page,
+}) => {
+  // v0.2's thesis in one path: the unlock is earned, and the server is the one
+  // deciding it was. Everything below happens in one page load.
+  await connected(page);
+  await mapNode(page, 'Foundations').click();
+  await completeEveryBlock(page);
+
+  // No "Mark as complete" survives on a quiz block — the server refuses that call,
+  // and a control it always rejects is a bug the reader gets to discover.
+  await expect(page.getByRole('button', { name: 'Mark as complete' })).toHaveCount(0);
+
+  await answerQuiz(page, 'wrong');
+  await expect(page.getByText('You scored 0%.')).toBeVisible();
+  await expect(page.getByText('Not passed yet — try again.')).toBeVisible();
+  // Which questions were wrong, not merely how many.
+  await expect(page.getByText('You got this one wrong.')).toHaveCount(2);
+
+  await page.getByRole('button', { name: 'Back to the book' }).click();
+  await expect(mapNode(page, 'Foundations')).toContainText('◐');
+  await expect(mapNode(page, 'Attractors')).toContainText('🔒');
+
+  await mapNode(page, 'Foundations').click();
+  await answerQuiz(page, 'right');
+  await expect(page.getByText('You scored 100%.')).toBeVisible();
+  await expect(page.getByText('Passed.')).toBeVisible();
+  await expect(page.getByText('You got this one wrong.')).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Back to the book' }).click();
+  await expect(mapNode(page, 'Foundations')).toContainText('✓');
+  await expect(mapNode(page, 'Attractors')).toContainText('○');
 });
 
 test('an author can build a book through the UI', async ({ page }) => {
