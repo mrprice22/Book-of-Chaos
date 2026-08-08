@@ -465,6 +465,25 @@ them.** The three v0.1 entries that used to live here became M9.
   touches a `docs/*-scope.md` will produce the annotation or reveal that it does not;
   check the run when it happens, and delete this entry either way.
 
+- **`scope-guard` skips a branch's first push entirely.** A push event reports the zero
+  sha as `before`, and the script falls back to `${head}^` — which does not exist when
+  the head is a root commit, so it prints "no usable base — nothing to compare" and
+  stops. A first push whose root commit introduces a scope contract is therefore
+  unguarded. Theoretical for `main`, whose root commit is long past, and it is an honest
+  skip rather than a false all-clear, which is why it was not fixed alongside the head
+  validation in `80fbcd6`. The fix is one line: diff against the empty tree,
+  `git hash-object -t tree /dev/null`, instead of giving up.
+
+- **`ci-status.sh` reads only `workflow_runs[0]`.** Correct while `ci.yml` is the only
+  workflow — the sha has exactly one run. Add a second workflow file and the script
+  reports one workflow's conclusion as *the* verdict for the commit, silently, which is
+  the same fault as "one job passed" standing in for the cold/warm matrix that the
+  script's own comments argue against. It would then be lying in the one direction it
+  was written to prevent. Either aggregate every run for the sha, or name the workflow
+  it is reporting on. Do it in the same commit that adds a second workflow. Separately
+  and much smaller: neither `curl` call sets `--max-time`, so an API that accepts the
+  connection and then stalls hangs the script instead of exiting 2.
+
 - **Nothing still checks `ci.yml` before it is pushed.** Moving the scope-guard logic
   into a script narrowed this — that shell is now covered by the `shell-syntax` stage
   and runnable by hand — but the YAML around it is not. The `if:` condition that made
