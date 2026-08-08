@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { t } from '../i18n';
+import { t, type MessageKey } from '../i18n';
 import type { BlockType } from '../module_bindings/types';
 import { CheckField, ErrorMessage, TextField } from './Fields';
 
@@ -11,7 +11,26 @@ export type BlockDraft = {
   isOptional: boolean;
 };
 
-const TYPES = ['Reading', 'ResourceLink'] as const;
+/**
+ * Every block type, with the label it gets in the dropdown.
+ *
+ * A `Record` keyed by the tag rather than the array this used to be: `BlockType` is
+ * a tagged union with no runtime list of its variants, and the old hand-written
+ * `['Reading', 'ResourceLink']` did not gain `Quiz` when the enum did — it simply
+ * kept compiling, so the author could not create the block type the whole release
+ * is about. A missing key here is now a type error.
+ */
+const TYPE_LABELS: Record<BlockType['tag'], MessageKey> = {
+  Reading: 'blockType.Reading',
+  ResourceLink: 'blockType.ResourceLink',
+  Quiz: 'blockType.Quiz',
+};
+
+const TYPES = Object.entries(TYPE_LABELS) as [BlockType['tag'], MessageKey][];
+
+function blockTagFrom(value: string): BlockType['tag'] {
+  return value in TYPE_LABELS ? (value as BlockType['tag']) : 'Reading';
+}
 
 /**
  * Create a block inside one chapter.
@@ -71,13 +90,11 @@ export function BlockForm({
         <select
           id={field('type')}
           value={blockType}
-          onChange={(e) =>
-            setBlockType(e.target.value === 'ResourceLink' ? 'ResourceLink' : 'Reading')
-          }
+          onChange={(e) => setBlockType(blockTagFrom(e.target.value))}
         >
-          {TYPES.map((type) => (
+          {TYPES.map(([type, labelKey]) => (
             <option key={type} value={type}>
-              {t(`blockType.${type}`)}
+              {t(labelKey)}
             </option>
           ))}
         </select>

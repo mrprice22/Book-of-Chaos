@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Identity } from 'spacetimedb';
 import { aBlock, aBook, aChapter } from '../test/factories';
@@ -192,6 +192,80 @@ describe('AuthorBookScreen prerequisites', () => {
     expect(alerts[0]).toHaveTextContent(
       'That would create a cycle: Second → First → Second',
     );
+  });
+
+  it('offers a quiz form on a Quiz block and on nothing else', () => {
+    sdk.rows = {
+      ...sdk.rows,
+      knowledgeBlocks: [
+        aBlock({ blockId: 101n, chapterId: 10n, title: 'Reading', position: 0 }),
+        aBlock({
+          blockId: 102n,
+          chapterId: 10n,
+          title: 'The quiz',
+          position: 1,
+          blockType: { tag: 'Quiz' },
+        }),
+      ],
+    };
+    render(<AuthorBookScreen bookId={1n} />);
+    expect(screen.getAllByRole('button', { name: 'Save quiz' })).toHaveLength(1);
+  });
+
+  it('writes the quiz to the block whose form was used', async () => {
+    sdk.rows = {
+      ...sdk.rows,
+      knowledgeBlocks: [
+        aBlock({
+          blockId: 102n,
+          chapterId: 10n,
+          title: 'The quiz',
+          blockType: { tag: 'Quiz' },
+        }),
+      ],
+    };
+    render(<AuthorBookScreen bookId={1n} />);
+
+    const form = within(screen.getByRole('group', { name: 'Question 1' }));
+    await userEvent.type(form.getByLabelText('Question'), 'Who grades?');
+    await userEvent.type(form.getByLabelText('Answer 1'), 'The server');
+    await userEvent.type(form.getByLabelText('Answer 2'), 'The client');
+    await userEvent.click(form.getByLabelText('Answer 1 is correct'));
+    await userEvent.click(screen.getByRole('button', { name: 'Save quiz' }));
+
+    expect(callTo('setQuiz')[0]?.args).toEqual({
+      blockId: 102n,
+      passThreshold: 100,
+      questions: [
+        {
+          promptHtml: 'Who grades?',
+          options: [
+            { textHtml: 'The server', isCorrect: true },
+            { textHtml: 'The client', isCorrect: false },
+          ],
+        },
+      ],
+    });
+  });
+
+  it('shows a rejected quiz under the block it was rejected for', async () => {
+    sdk.rejectWith = { setQuiz: 'Question 1 has no correct answer marked.' };
+    sdk.rows = {
+      ...sdk.rows,
+      knowledgeBlocks: [
+        aBlock({ blockId: 102n, chapterId: 10n, blockType: { tag: 'Quiz' } }),
+        aBlock({ blockId: 103n, chapterId: 11n, blockType: { tag: 'Quiz' } }),
+      ],
+    };
+    render(<AuthorBookScreen bookId={1n} />);
+
+    await userEvent.click(
+      screen.getAllByRole('button', { name: 'Save quiz' })[0] as HTMLElement,
+    );
+    // One alert, under one quiz: the other block's form must not inherit it.
+    const alerts = await screen.findAllByRole('alert');
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toHaveTextContent('Question 1 has no correct answer marked.');
   });
 
   it('reflects the stored edges rather than a stale local draft', () => {

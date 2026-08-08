@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BlockForm } from './BlockForm';
 import { BookForm } from './BookForm';
@@ -112,6 +112,28 @@ describe('BlockForm', () => {
         blockType: { tag: 'ResourceLink' },
         url: 'https://example.com',
       }),
+    );
+  });
+
+  it('offers every block type the module has, Quiz included', async () => {
+    // The regression this dropdown already had once: `BlockType` gained `Quiz` and
+    // the hand-written list did not, so the release's own block type could not be
+    // created through the UI and nothing failed.
+    const onSubmit = vi.fn();
+    render(
+      <BlockForm chapterId={10n} onSubmit={onSubmit} pending={false} error={undefined} />,
+    );
+    expect(
+      within(screen.getByLabelText('Type'))
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['Reading', 'Resource link', 'Quiz']);
+
+    await userEvent.type(screen.getByLabelText('Title'), 'The quiz');
+    await userEvent.selectOptions(screen.getByLabelText('Type'), 'Quiz');
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }));
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({ blockType: { tag: 'Quiz' }, url: undefined }),
     );
   });
 

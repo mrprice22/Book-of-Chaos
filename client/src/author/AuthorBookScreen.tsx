@@ -14,6 +14,9 @@ export function AuthorBookScreen({ bookId }: { bookId: bigint }) {
   const [chapters] = useTable(tables.chapters);
   const [blocks] = useTable(tables.knowledgeBlocks);
   const [deps] = useTable(tables.chapterDeps);
+  // Only to tell an author their quiz block already has a quiz to replace; the
+  // answer key is not readable from any client, this one included.
+  const [quizQuestions] = useTable(tables.quizQuestions);
 
   const createChapter = useReducer(reducers.createChapter);
   const publishBook = useReducer(reducers.publishBook);
@@ -85,6 +88,7 @@ export function AuthorBookScreen({ bookId }: { bookId: bigint }) {
               siblings={bookChapters}
               blocks={blocks}
               deps={deps}
+              quizQuestions={quizQuestions}
             />
           ))}
         </ol>

@@ -328,7 +328,7 @@ these is not an option.
       The `ChapterScreen` fake had to learn to tell the two reducers apart; it keys
       them by `accessorName`, with a control test on the names, because a wrong key
       would have made every reducer call throw rather than quietly pass
-- [ ] **M11.3** Author quiz form — add/remove questions and options, mark correct answers,
+- [x] **M11.3** Author quiz form — add/remove questions and options, mark correct answers,
       set the pass threshold. Server rejections surfaced as readable errors, the way M7.2
       surfaced cycle rejection. `BlockForm`'s `TYPES` array is a hand-written
       `['Reading', 'ResourceLink']` that does not derive from `BlockType`, so adding
@@ -336,7 +336,23 @@ these is not an option.
       it needs adding by hand, along with a `blockType.Quiz` string in
       `i18n/en-US.ts`. Every rejection `rules::validate_quiz` can produce names the
       offending question by its 1-based position; the form should keep that number
-      meaningful rather than showing the message detached from the question
+      meaningful rather than showing the message detached from the question.
+      Done, and the `TYPES` array replaced rather than appended to: it is now a
+      `Record<BlockType['tag'], MessageKey>`, so a missing variant is a type error
+      instead of a dropdown that silently omits the block type the release is
+      about. The number stays meaningful because each question is a `fieldset`
+      whose legend is `Question {n}` with the same 1-based numbering the reducer
+      counts by, and removing a question renumbers the rest — a test watches that,
+      since a stale number is worse than none.
+      **Decided: the form always writes a whole quiz and never pre-fills.**
+      `set_quiz` replaces rather than patches, and the deeper reason is that the
+      answer key is unreadable *from the author's client too* — it is a non-public
+      table, and nothing about ownership changes that. A form seeded from the
+      stored questions would look like an edit while silently dropping every
+      correct-answer mark, so it starts blank and says so when there is a quiz to
+      replace. No client-side validation either: `rules::validate_quiz` is the
+      trust boundary, and a second copy of its rules in the browser is a thing to
+      keep in sync. A blank threshold is sent as 0 and the server names it
 - [ ] **M11.4** Extend the Playwright smoke test to cover fail-then-pass: submit a wrong
       answer, assert still locked, submit a right one, assert unlocked
 

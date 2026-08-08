@@ -1,9 +1,15 @@
 import { useReducer } from 'spacetimedb/react';
 import { reducers } from '../module_bindings';
-import type { Chapter, ChapterDep, KnowledgeBlock } from '../module_bindings/types';
+import type {
+  Chapter,
+  ChapterDep,
+  KnowledgeBlock,
+  QuizQuestion,
+} from '../module_bindings/types';
 import { inReadingOrder } from '../reader/blockOrder';
 import { BlockForm, type BlockDraft } from './BlockForm';
 import { PrerequisiteForm } from './PrerequisiteForm';
+import { QuizEditor } from './QuizEditor';
 import { useAction } from './useAction';
 
 /**
@@ -19,11 +25,13 @@ export function ChapterEditor({
   siblings,
   blocks,
   deps,
+  quizQuestions,
 }: {
   chapter: Chapter;
   siblings: readonly Chapter[];
   blocks: readonly KnowledgeBlock[];
   deps: readonly ChapterDep[];
+  quizQuestions: readonly QuizQuestion[];
 }) {
   const createBlock = useReducer(reducers.createBlock);
   const setChapterDeps = useReducer(reducers.setChapterDeps);
@@ -47,7 +55,12 @@ export function ChapterEditor({
       <ul className="author-blocks">
         {inReadingOrder(blocks.filter((b) => b.chapterId === chapter.chapterId)).map(
           (block) => (
-            <li key={String(block.blockId)}>{block.title}</li>
+            <li key={String(block.blockId)}>
+              {block.title}
+              {block.blockType.tag === 'Quiz' && (
+                <QuizEditor block={block} quizQuestions={quizQuestions} />
+              )}
+            </li>
           ),
         )}
       </ul>
