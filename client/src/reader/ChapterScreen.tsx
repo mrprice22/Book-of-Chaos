@@ -5,6 +5,8 @@ import { t } from '../i18n';
 import { HOME_PATH, navigate } from '../routing/route';
 import { ChapterView } from './ChapterView';
 import { buildGraph, chapterState } from './chapterState';
+import { buildQuiz } from './quizModel';
+import type { QuizAnswer, QuizView } from './quizModel';
 
 function BackToBook({ children }: { children: React.ReactNode }) {
   return (
@@ -24,7 +26,13 @@ export function ChapterScreen({ chapterId }: { chapterId: bigint }) {
   const [blocks, blocksReady] = useTable(tables.knowledgeBlocks);
   const [deps, depsReady] = useTable(tables.chapterDeps);
   const [progress] = useTable(tables.readerProgress);
+  const [quizConfigs] = useTable(tables.quizConfig);
+  const [quizQuestions] = useTable(tables.quizQuestions);
+  const [quizOptions] = useTable(tables.quizOptions);
+  const [quizAttempts] = useTable(tables.quizAttempts);
+  const [quizResults] = useTable(tables.quizAttemptResults);
   const completeBlock = useReducer(reducers.completeBlock);
+  const submitQuiz = useReducer(reducers.submitQuiz);
   const [error, setError] = useState<string | undefined>(undefined);
 
   if (!chaptersReady || !blocksReady || !depsReady) {
@@ -77,12 +85,43 @@ export function ChapterScreen({ chapterId }: { chapterId: bigint }) {
     });
   };
 
+  const onSubmitQuiz = (blockId: bigint, answers: QuizAnswer[]) => {
+    setError(undefined);
+    // Grading is the server's, and so is the verdict: nothing is decided here.
+    // The score comes back as a `quiz_attempts` row through the subscription.
+    submitQuiz({ blockId, answers }).catch((e: unknown) => {
+      setError(e instanceof Error ? e.message : String(e));
+    });
+  };
+
+  const chapterBlocks = blocks.filter((b) => b.chapterId === chapterId);
+  const quizzes = new Map<bigint, QuizView>();
+  for (const block of chapterBlocks) {
+    if (block.blockType.tag !== 'Quiz') continue;
+    const quiz = buildQuiz(
+      block.blockId,
+      {
+        configs: quizConfigs,
+        questions: quizQuestions,
+        options: quizOptions,
+        attempts: quizAttempts,
+        results: quizResults,
+      },
+      identity,
+    );
+    // A Quiz block with no config row has no entry, which is how `ChapterView`
+    // tells "not written yet" from "written".
+    if (quiz) quizzes.set(block.blockId, quiz);
+  }
+
   return (
     <ChapterView
       chapter={chapter}
-      blocks={blocks.filter((b) => b.chapterId === chapterId)}
+      blocks={chapterBlocks}
       completedBlockIds={completedBlockIds}
       onComplete={onComplete}
+      quizzes={quizzes}
+      onSubmitQuiz={onSubmitQuiz}
       onBack={() => navigate(HOME_PATH)}
       error={error}
     />

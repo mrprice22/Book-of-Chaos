@@ -92,6 +92,17 @@ function attemptsOn(blockId: bigint) {
   return [...conn.db.quizAttempts.iter()].filter((a) => a.blockId === blockId);
 }
 
+function resultsFor(attemptId: bigint) {
+  return [...conn.db.quizAttemptResults.iter()].filter((r) => r.attemptId === attemptId);
+}
+
+/** The block's questions in author order — the order the reader sees them in. */
+function questionsOn(blockId: bigint) {
+  return [...conn.db.quizQuestions.iter()]
+    .filter((q) => q.blockId === blockId)
+    .sort((a, b) => a.position - b.position);
+}
+
 async function createBlock(chapterId: bigint, title: string, kind: 'Reading' | 'Quiz') {
   await conn.reducers.createBlock({
     chapterId,
@@ -260,6 +271,28 @@ test('a half-right submission is scored as half and still fails', async () => {
   );
   expect(attempt.passed).toBe(false);
   expect(isComplete(open.quizBlockId)).toBe(false);
+
+  // The reader is shown *which* questions were wrong, and a score of 50 cannot
+  // say that: one right and one wrong is the same number whichever way round it
+  // is. So the per-question breakdown is checked by name, not by counting.
+  const results = await waitFor(
+    () => {
+      const rows = resultsFor(attempt.attemptId);
+      return rows.length === 2 ? rows : undefined;
+    },
+    'the per-question results',
+  );
+  const questions = questionsOn(open.quizBlockId);
+  const verdictOn = (index: number) => {
+    const question = questions[index];
+    if (!question) throw new Error(`the fixture quiz lost question ${index}`);
+    const row = results.find((r) => r.questionId === question.questionId);
+    if (!row) throw new Error(`no result row for question ${index}`);
+    return row.isCorrect;
+  };
+  // `answersFor(..., 'half')` answers the first question right and the second wrong.
+  expect(verdictOn(0)).toBe(true);
+  expect(verdictOn(1)).toBe(false);
 });
 
 test('a passing submission completes the block', async () => {

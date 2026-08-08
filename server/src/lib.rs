@@ -148,7 +148,7 @@ pub struct ReaderProgress {
 // Quiz tables
 // ---------------------------------------------------------------------------
 //
-// Five tables, four of them public. SpacetimeDB pushes the rows of a public
+// Six tables, five of them public. SpacetimeDB pushes the rows of a public
 // table to every subscribed client, so "which option is correct" cannot be a
 // column on anything a reader can subscribe to — it would be a "Mark as
 // complete" button with extra steps. The split below is the load-bearing
@@ -158,6 +158,9 @@ pub struct ReaderProgress {
 //   quiz_questions  public   — prompt text, order, and how many answers to accept
 //   quiz_options    public   — option text and order, and nothing about truth
 //   quiz_attempts   public   — a reader's score and verdict, never their answers
+//   quiz_attempt_results
+//                   public   — which questions an attempt got right, never which
+//                              options it picked
 //   quiz_answer_key PRIVATE  — which options are correct. Reducer code only.
 //
 // `quiz_answer_key` carries no `public` attribute, so it is absent from the
@@ -236,6 +239,39 @@ pub struct QuizAttempt {
     /// `score_percent >= QuizConfig::pass_threshold`, decided server-side.
     pub passed: bool,
     pub submitted_at: Timestamp,
+}
+
+/// Per-question feedback for one attempt: which questions the reader got right.
+///
+/// Public, and the narrowest thing that can answer "which questions were wrong",
+/// which the v0.2 scope lists as part of the feedback a reader gets on submission.
+/// A reducer cannot return a value to its caller, so feedback has to be a row.
+///
+/// **What it deliberately does not store: the selections.** A row says "question 7
+/// of attempt 12 was correct" and nothing about which options were ticked, for the
+/// same reason `QuizAttempt` stores a verdict rather than a submission. To another
+/// reader these rows are unreadable — they do not know what was selected, so
+/// "correct" names no option.
+///
+/// To the reader who submitted it, though, this *is* a slow channel onto the answer
+/// key: they know what they ticked, so a handful of retakes on a single-answer
+/// question with three options will identify the right one. That is inherent to
+/// telling anybody which questions they got wrong, under unlimited retakes — the
+/// same information leaks through the score alone on a one-question quiz. It is
+/// accepted rather than overlooked: the alternative is withholding the feedback the
+/// release promised, and retake *policy*, which is where a cap on this would live,
+/// is deferred. Nothing here widens it beyond the reader's own attempts.
+#[spacetimedb::table(accessor = quiz_attempt_results, public)]
+pub struct QuizAttemptResult {
+    #[primary_key]
+    #[auto_inc]
+    pub result_id: u64,
+    /// The `QuizAttempt` this belongs to. Results live and die with their attempt.
+    #[index(btree)]
+    pub attempt_id: u64,
+    #[index(btree)]
+    pub question_id: u64,
+    pub is_correct: bool,
 }
 
 /// The answer key. **Not public** — this table has no `public` attribute and must
@@ -699,6 +735,16 @@ pub fn delete_block(ctx: &ReducerContext, block_id: u64) -> Result<(), String> {
         .map(|a| a.attempt_id)
         .collect();
     for attempt_id in attempt_ids {
+        let result_ids: Vec<u64> = ctx
+            .db
+            .quiz_attempt_results()
+            .attempt_id()
+            .filter(attempt_id)
+            .map(|r| r.result_id)
+            .collect();
+        for result_id in result_ids {
+            ctx.db.quiz_attempt_results().result_id().delete(result_id);
+        }
         ctx.db.quiz_attempts().attempt_id().delete(attempt_id);
     }
 
@@ -1011,7 +1057,7 @@ pub fn submit_quiz(
 
     let grade = rules::grade_quiz(config.pass_threshold, &key, &submitted)?;
 
-    ctx.db.quiz_attempts().insert(QuizAttempt {
+    let attempt = ctx.db.quiz_attempts().insert(QuizAttempt {
         attempt_id: 0, // assigned by #[auto_inc]
         identity: reader,
         block_id,
@@ -1019,6 +1065,17 @@ pub fn submit_quiz(
         passed: grade.passed,
         submitted_at: ctx.timestamp,
     });
+    // One row per question, so the reader can be shown *which* ones were wrong
+    // rather than only how many. `insert` returns the row with its assigned id,
+    // which is the only way to tie these to the attempt above.
+    for result in &grade.results {
+        ctx.db.quiz_attempt_results().insert(QuizAttemptResult {
+            result_id: 0, // assigned by #[auto_inc]
+            attempt_id: attempt.attempt_id,
+            question_id: result.question_id,
+            is_correct: result.is_correct,
+        });
+    }
 
     if grade.passed && !progress.has_completed(block_id) {
         ctx.db.reader_progress().insert(ReaderProgress {

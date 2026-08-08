@@ -99,6 +99,14 @@ export const QuizAttempt = __t.object("QuizAttempt", {
 });
 export type QuizAttempt = __Infer<typeof QuizAttempt>;
 
+export const QuizAttemptResult = __t.object("QuizAttemptResult", {
+  resultId: __t.u64(),
+  attemptId: __t.u64(),
+  questionId: __t.u64(),
+  isCorrect: __t.bool(),
+});
+export type QuizAttemptResult = __Infer<typeof QuizAttemptResult>;
+
 export const QuizConfig = __t.object("QuizConfig", {
   blockId: __t.u64(),
   passThreshold: __t.u32(),

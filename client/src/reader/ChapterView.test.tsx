@@ -2,9 +2,11 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { aBlock, aChapter } from '../test/factories';
 import { ChapterView } from './ChapterView';
+import type { QuizView } from './quizModel';
 
 function renderView(props: Partial<Parameters<typeof ChapterView>[0]> = {}) {
   const onComplete = vi.fn();
+  const onSubmitQuiz = vi.fn();
   const onBack = vi.fn();
   render(
     <ChapterView
@@ -12,12 +14,27 @@ function renderView(props: Partial<Parameters<typeof ChapterView>[0]> = {}) {
       blocks={[aBlock()]}
       completedBlockIds={new Set()}
       onComplete={onComplete}
+      quizzes={new Map()}
+      onSubmitQuiz={onSubmitQuiz}
       onBack={onBack}
       {...props}
     />,
   );
-  return { onComplete, onBack };
+  return { onComplete, onSubmitQuiz, onBack };
 }
+
+const A_QUIZ: QuizView = {
+  blockId: 100n,
+  passThreshold: 100,
+  questions: [
+    {
+      questionId: 200n,
+      promptHtml: '<p>Who decides?</p>',
+      isMultiAnswer: false,
+      options: [{ optionId: 300n, textHtml: 'The server' }],
+    },
+  ],
+};
 
 describe('ChapterView', () => {
   it('shows the chapter title and description', () => {
@@ -93,6 +110,48 @@ describe('ChapterView', () => {
   it('surfaces a rejection from the server as an alert', () => {
     renderView({ error: 'Chapter is blocked' });
     expect(screen.getByRole('alert')).toHaveTextContent('Chapter is blocked');
+  });
+
+  it('offers no "Mark as complete" on a quiz block, and shows the quiz instead', async () => {
+    // Not merely ineffective: `complete_block` refuses a Quiz block (M10.3), so
+    // the button would be a control the server always rejects.
+    const { onSubmitQuiz } = renderView({
+      blocks: [aBlock({ blockId: 100n, blockType: { tag: 'Quiz' } })],
+      quizzes: new Map([[100n, A_QUIZ]]),
+    });
+    expect(
+      screen.queryByRole('button', { name: /mark as complete/i }),
+    ).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('radio', { name: 'The server' }));
+    await userEvent.click(screen.getByRole('button', { name: /submit/i }));
+    expect(onSubmitQuiz).toHaveBeenCalledWith(100n, [
+      { questionId: 200n, selectedOptionIds: [300n] },
+    ]);
+  });
+
+  it('keeps the quiz on screen after it has been passed, and still offers no button', () => {
+    // Completion is shown, but retakes are unlimited in v0.2 — the quiz stays.
+    renderView({
+      blocks: [aBlock({ blockId: 100n, blockType: { tag: 'Quiz' } })],
+      quizzes: new Map([[100n, A_QUIZ]]),
+      completedBlockIds: new Set([100n]),
+    });
+    expect(screen.getByText(/completed/i)).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /mark as complete/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /submit/i })).toBeInTheDocument();
+  });
+
+  it('says a quiz block with no quiz configured has not been written yet', () => {
+    renderView({
+      blocks: [aBlock({ blockId: 100n, blockType: { tag: 'Quiz' } })],
+      quizzes: new Map(),
+    });
+    expect(screen.getByText(/has not been written yet/i)).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /mark as complete/i }),
+    ).not.toBeInTheDocument();
   });
 
   it('goes back to the book', async () => {

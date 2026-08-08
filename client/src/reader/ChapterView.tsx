@@ -1,12 +1,17 @@
 import { t } from '../i18n';
 import type { Chapter, KnowledgeBlock } from '../module_bindings/types';
 import { inReadingOrder } from './blockOrder';
+import { QuizBlock } from './QuizBlock';
+import type { QuizAnswer, QuizView } from './quizModel';
 
 export type ChapterViewProps = {
   chapter: Chapter;
   blocks: readonly KnowledgeBlock[];
   completedBlockIds: ReadonlySet<bigint>;
   onComplete: (blockId: bigint) => void;
+  /** The quiz on a `Quiz` block, by block id. Absent means nobody has written it. */
+  quizzes: ReadonlyMap<bigint, QuizView>;
+  onSubmitQuiz: (blockId: bigint, answers: QuizAnswer[]) => void;
   onBack: () => void;
   error?: string;
 };
@@ -35,6 +40,8 @@ export function ChapterView({
   blocks,
   completedBlockIds,
   onComplete,
+  quizzes,
+  onSubmitQuiz,
   onBack,
   error,
 }: ChapterViewProps) {
@@ -61,16 +68,25 @@ export function ChapterView({
         <ol className="blocks">
           {ordered.map((block) => {
             const done = completedBlockIds.has(block.blockId);
+            const isQuiz = block.blockType.tag === 'Quiz';
             return (
               <li key={String(block.blockId)} data-complete={done}>
                 <h3>{block.title}</h3>
                 <BlockBody block={block} />
-                {done ? (
-                  <p className="block-done">{t('block.completed')}</p>
+                {done && <p className="block-done">{t('block.completed')}</p>}
+                {/* A quiz is completed by passing it and by nothing else, so it
+                    gets no "Mark as complete" button — the server refuses that
+                    call (M10.3), and a control that is always rejected is a bug
+                    the reader gets to discover. It keeps its form after passing:
+                    retakes are unlimited in v0.2. */}
+                {isQuiz ? (
+                  <QuizBlock quiz={quizzes.get(block.blockId)} onSubmit={onSubmitQuiz} />
                 ) : (
-                  <button type="button" onClick={() => onComplete(block.blockId)}>
-                    {t('block.markComplete')}
-                  </button>
+                  !done && (
+                    <button type="button" onClick={() => onComplete(block.blockId)}>
+                      {t('block.markComplete')}
+                    </button>
+                  )
                 )}
               </li>
             );

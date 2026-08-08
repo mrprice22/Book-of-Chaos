@@ -27,6 +27,12 @@ body {
   block-size: auto;
 }
 
+.quiz-options {
+  /* The options are a list for the sake of the markup, not the bullets. */
+  padding-inline-start: 0;
+  list-style: none;
+}
+
 .connection {
   font-size: 0.875rem;
   opacity: 0.75;

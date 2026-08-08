@@ -3,6 +3,11 @@ import type {
   Book,
   Chapter,
   KnowledgeBlock,
+  QuizAttempt,
+  QuizAttemptResult,
+  QuizConfig,
+  QuizOption,
+  QuizQuestion,
   ReaderProgress,
 } from '../module_bindings/types';
 
@@ -64,6 +69,53 @@ export function someProgress(overrides: Partial<ReaderProgress> = {}): ReaderPro
     identity: Identity.zero(),
     blockId: 100n,
     completedAt: NOW,
+    ...overrides,
+  };
+}
+
+export function aQuizConfig(overrides: Partial<QuizConfig> = {}): QuizConfig {
+  return { blockId: 100n, passThreshold: 50, ...overrides };
+}
+
+export function aQuestion(overrides: Partial<QuizQuestion> = {}): QuizQuestion {
+  return {
+    questionId: 200n,
+    blockId: 100n,
+    promptHtml: '<p>What is the question?</p>',
+    position: 0,
+    isMultiAnswer: false,
+    ...overrides,
+  };
+}
+
+export function anOption(overrides: Partial<QuizOption> = {}): QuizOption {
+  return {
+    optionId: 300n,
+    questionId: 200n,
+    textHtml: 'An answer',
+    position: 0,
+    ...overrides,
+  };
+}
+
+export function anAttempt(overrides: Partial<QuizAttempt> = {}): QuizAttempt {
+  return {
+    attemptId: 400n,
+    identity: Identity.zero(),
+    blockId: 100n,
+    scorePercent: 0,
+    passed: false,
+    submittedAt: NOW,
+    ...overrides,
+  };
+}
+
+export function aResult(overrides: Partial<QuizAttemptResult> = {}): QuizAttemptResult {
+  return {
+    resultId: 500n,
+    attemptId: 400n,
+    questionId: 200n,
+    isCorrect: false,
     ...overrides,
   };
 }

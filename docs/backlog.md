@@ -272,7 +272,7 @@ these is not an option.
 
 ## M11 — Quiz block: reader and author UI
 
-- [ ] **M11.1** Reader quiz view — render questions, select answers, submit, see score and
+- [x] **M11.1** Reader quiz view — render questions, select answers, submit, see score and
       which questions were wrong. All strings through `t()`.
       Note the starting point: `ChapterView` does not branch on `blockType` at all, so
       a `Quiz` block currently renders as its body HTML with a "Mark as complete"
@@ -290,7 +290,26 @@ these is not an option.
       and it is worth thinking about *what* it stores: "question 3 was correct",
       accumulated across unlimited retakes, is the key for a single-answer question
       after a couple of attempts. That is inherent to giving feedback at all, not a
-      reason to skip it — but it should be a decision rather than a side effect
+      reason to skip it — but it should be a decision rather than a side effect.
+      **Decided:** a sixth quiz table, `quiz_attempt_results`, public, one row per
+      question per attempt holding `is_correct` and nothing else. It stores the
+      verdict on a *question*, never the selections, so to any other reader the
+      rows are unreadable — "correct" names no option unless you know what was
+      ticked. To the reader who ticked it, it is exactly the slow channel the task
+      describes, and that is accepted rather than overlooked: the same information
+      leaks through the score alone on a one-question quiz, so the alternative is
+      withholding the feedback the scope promised. Where a cap on it would live is
+      retake policy, which v0.2 defers. Results are deleted with their attempt.
+      Two consequences worth naming: a question the attempt never graded — one the
+      author added afterwards — is shown as neither right nor wrong rather than
+      wrong, and the client therefore submits every question including the blank
+      ones, so a skipped question comes back with a verdict instead of silence.
+      The reader surface is `QuizBlock`, fed by the pure `quizModel`; the gate
+      watches the new rows through `quiz-gate`, whose half-right case now asserts
+      *which* question was wrong by name rather than counting — a 50% score says
+      the same thing whichever way round it is. Watched failing before being
+      trusted: writing no result rows turns that case red on the breakdown while
+      the score assertion beside it stays green
 - [ ] **M11.2** Failing shows the score and a retry; passing completes the block and the
       map node changes state live, with no reload
 - [ ] **M11.3** Author quiz form — add/remove questions and options, mark correct answers,

@@ -56,6 +56,7 @@ import BooksRow from "./books_table";
 import ChapterDepsRow from "./chapter_deps_table";
 import ChaptersRow from "./chapters_table";
 import KnowledgeBlocksRow from "./knowledge_blocks_table";
+import QuizAttemptResultsRow from "./quiz_attempt_results_table";
 import QuizAttemptsRow from "./quiz_attempts_table";
 import QuizConfigRow from "./quiz_config_table";
 import QuizOptionsRow from "./quiz_options_table";
@@ -126,6 +127,23 @@ const tablesSchema = __schema({
       { name: 'knowledge_blocks_block_id_key', constraint: 'unique', columns: ['blockId'] },
     ],
   }, KnowledgeBlocksRow),
+  quizAttemptResults: __table({
+    name: 'quiz_attempt_results',
+    indexes: [
+      { accessor: 'attempt_id', name: 'quiz_attempt_results_attempt_id_idx_btree', algorithm: 'btree', columns: [
+        'attemptId',
+      ] },
+      { accessor: 'question_id', name: 'quiz_attempt_results_question_id_idx_btree', algorithm: 'btree', columns: [
+        'questionId',
+      ] },
+      { accessor: 'result_id', name: 'quiz_attempt_results_result_id_idx_btree', algorithm: 'btree', columns: [
+        'resultId',
+      ] },
+    ],
+    constraints: [
+      { name: 'quiz_attempt_results_result_id_key', constraint: 'unique', columns: ['resultId'] },
+    ],
+  }, QuizAttemptResultsRow),
   quizAttempts: __table({
     name: 'quiz_attempts',
     indexes: [
@@ -244,6 +262,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "chapter_deps": Omit<typeof tablesSchema.schemaType.tables["chapterDeps"], "accessorName"> & { readonly accessorName: "chapter_deps" };
     /** @deprecated Use `knowledgeBlocks` instead. This alias will be removed in the next major version. */
     readonly "knowledge_blocks": Omit<typeof tablesSchema.schemaType.tables["knowledgeBlocks"], "accessorName"> & { readonly accessorName: "knowledge_blocks" };
+    /** @deprecated Use `quizAttemptResults` instead. This alias will be removed in the next major version. */
+    readonly "quiz_attempt_results": Omit<typeof tablesSchema.schemaType.tables["quizAttemptResults"], "accessorName"> & { readonly accessorName: "quiz_attempt_results" };
     /** @deprecated Use `quizAttempts` instead. This alias will be removed in the next major version. */
     readonly "quiz_attempts": Omit<typeof tablesSchema.schemaType.tables["quizAttempts"], "accessorName"> & { readonly accessorName: "quiz_attempts" };
     /** @deprecated Use `quizConfig` instead. This alias will be removed in the next major version. */
@@ -274,6 +294,7 @@ const REMOTE_MODULE = {
 const tableAccessorAliases = {
   "chapter_deps": "chapterDeps",
   "knowledge_blocks": "knowledgeBlocks",
+  "quiz_attempt_results": "quizAttemptResults",
   "quiz_attempts": "quizAttempts",
   "quiz_config": "quizConfig",
   "quiz_options": "quizOptions",
@@ -303,6 +324,8 @@ export type DbView = __DbViewBase & {
   readonly "chapter_deps": __DbViewBase["chapterDeps"];
   /** @deprecated Use `knowledgeBlocks` instead. This alias will be removed in the next major version. */
   readonly "knowledge_blocks": __DbViewBase["knowledgeBlocks"];
+  /** @deprecated Use `quizAttemptResults` instead. This alias will be removed in the next major version. */
+  readonly "quiz_attempt_results": __DbViewBase["quizAttemptResults"];
   /** @deprecated Use `quizAttempts` instead. This alias will be removed in the next major version. */
   readonly "quiz_attempts": __DbViewBase["quizAttempts"];
   /** @deprecated Use `quizConfig` instead. This alias will be removed in the next major version. */
@@ -321,6 +344,8 @@ export type Tables = __TablesBase & {
   readonly "chapter_deps": __TablesBase["chapterDeps"];
   /** @deprecated Use `knowledgeBlocks` instead. This alias will be removed in the next major version. */
   readonly "knowledge_blocks": __TablesBase["knowledgeBlocks"];
+  /** @deprecated Use `quizAttemptResults` instead. This alias will be removed in the next major version. */
+  readonly "quiz_attempt_results": __TablesBase["quizAttemptResults"];
   /** @deprecated Use `quizAttempts` instead. This alias will be removed in the next major version. */
   readonly "quiz_attempts": __TablesBase["quizAttempts"];
   /** @deprecated Use `quizConfig` instead. This alias will be removed in the next major version. */
