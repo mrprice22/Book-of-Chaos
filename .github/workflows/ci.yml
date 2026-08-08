@@ -125,11 +125,21 @@ jobs:
         # A push compares against the commit that was there before; a pull request
         # against the merge base with its target. The script resolves an unusable
         # base — zero sha, or a commit lost to a force-push — to the parent commit.
+        #
+        # The context values arrive through `env` rather than `${{ }}` inside the
+        # script body. A branch name is attacker-chosen on a fork's pull request and
+        # may legally contain a double quote, which would end the string and leave the
+        # rest of the name running as shell.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_SHA: ${{ github.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
+          if [ "$EVENT_NAME" = "pull_request" ]; then
             ./scripts/scope-guard.sh \
-              "$(git merge-base "origin/${{ github.base_ref }}" "${{ github.sha }}")" \
-              "${{ github.sha }}"
+              "$(git merge-base "origin/$BASE_REF" "$HEAD_SHA")" \
+              "$HEAD_SHA"
           else
-            ./scripts/scope-guard.sh "${{ github.event.before }}" "${{ github.sha }}"
+            ./scripts/scope-guard.sh "$BEFORE_SHA" "$HEAD_SHA"
           fi

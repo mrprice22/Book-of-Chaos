@@ -457,16 +457,13 @@ them.** The three v0.1 entries that used to live here became M9.
   message, would turn a confusing half-hour into one line of output. Cost one
   session most of an afternoon chasing failures that were not in the code.
 
-- **`scope-guard` has still never been *seen* running in CI.** Its trigger was fixed
-  after the investigation above found it skipped in all fourteen runs to date, and its
-  logic now lives in `scripts/scope-guard.sh`, which was exercised locally against real
-  commit ranges: `c619c68` (warns), `bc31cc2` (silent), a zero sha and a missing base
-  (both fall back to the parent and still warn), and a multi-commit range. That is
-  evidence about the script. It is **not** evidence that the job fires, which only a
-  push can produce — and the last time this job was repaired, the repair was correct
-  and changed nothing, because nobody checked whether the job ran at all. Confirm from
-  the next run's job list that `scope-guard` reports a conclusion rather than
-  `skipped`, then delete this entry. `./scripts/ci-status.sh` prints exactly that line.
+- **`scope-guard` fires now, but its *warning* path has never run in CI.** Run #15 on
+  `112864b` reported `scope-guard -> success` rather than `skipped`, which closes the
+  question this entry was opened to answer: the job executes on push. What that run
+  diffed contained no scope contract, so what has been observed in CI is the silent
+  path. The warning path is covered locally only. Nothing to do — the next commit that
+  touches a `docs/*-scope.md` will produce the annotation or reveal that it does not;
+  check the run when it happens, and delete this entry either way.
 
 - **Nothing still checks `ci.yml` before it is pushed.** Moving the scope-guard logic
   into a script narrowed this — that shell is now covered by the `shell-syntax` stage
