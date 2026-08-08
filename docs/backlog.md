@@ -146,9 +146,10 @@ in the safety net that every later milestone's autonomy rests on.
       commit. (The "six author writes" this task was drafted with came from M7.4's
       throwaway harness; the module actually has nine owner-gated reducers, and covering
       six of them would have left three doors the gate does not watch.)
-- [~] **M9.2** Bump `actions/checkout` and `actions/cache`; confirm from the run log that
+- [x] **M9.2** Bump `actions/checkout` and `actions/cache`; confirm from the run log that
       the Node 20 deprecation warning is actually gone, not just relocated.
-      **Code done, confirmation pending a push.** Bumped to `checkout@v7` and `cache@v6`,
+      **Confirmed by run #11** on `9e11846`: zero annotations, where run #10 on `13ff0e0`
+      carried the deprecation warning as an annotation. Bumped to `checkout@v7` and `cache@v6`,
       not the `@v5` this task was drafted with: v5 was current when the parking-lot note
       was written and is now two majors stale (checkout is at v7.0.1, cache at v6.1.0).
       Both current majors declare `using: node24`, and they are the only actions in the
@@ -165,6 +166,16 @@ in the safety net that every later milestone's autonomy rests on.
       have recreated the divergence the task was written to avoid, since CI never builds
       that image. Confirmed by output: `spacetime build` now says "Optimising module with
       wasm-opt..." where it used to say it could not find one
+
+- [x] **M9.4** Stop CI caching the standalone database. Added after run #10 failed on a
+      **docs-only** commit whose parent passed, with the same
+      `webServer was not able to start` signature as the historic `c954181` failure.
+      Cause: `~/.local/share/spacetime` holds both `bin/` (toolchain) and `data/` (the
+      database), so the cache carried a database into the next run while the identity
+      owning it — `~/.config/spacetime`, never cached — was regenerated. Publishing then
+      failed `403 Forbidden ... not authorized ... update database`. Reproduced locally by
+      moving the config aside, and the fix confirmed by moving config *and* data aside;
+      cache path narrowed to `~/.local/share/spacetime/bin`
 
 **Acceptance:** deleting a `rules::require_owner(...)` call from any author reducer turns
 the gate red. Verify by actually deleting one, watching it fail, and restoring it — an

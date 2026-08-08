@@ -31,12 +31,21 @@ jobs:
             ~/.rustup
             ~/.nvm
             ~/.local/bin
-            ~/.local/share/spacetime
+            ~/.local/share/spacetime/bin
             ~/.local/share/binaryen
             ~/.boc-env
-          # ~/.local/share/spacetime holds the binaries the ~/.local/bin/spacetime
+          # ~/.local/share/spacetime/bin holds the binaries the ~/.local/bin/spacetime
           # launcher execs. Caching only the launcher restored a spacetime that could
           # not run, and install-toolchain.sh skipped reinstalling it.
+          #
+          # `/bin` is load-bearing. Caching the whole directory also carried
+          # `data/` — the standalone database — into the next run, while the identity
+          # that owns it (~/.config/spacetime) was never cached. The restored run
+          # minted a fresh identity, and publishing to a database it did not own
+          # failed with `403 Forbidden ... not authorized ... update database`,
+          # surfacing four stages later as "webServer was not able to start".
+          # A CI run should begin with no database anyway: caching one lets state
+          # leak between commits and makes runs order-dependent.
           #
           # ci.yml is in the key because this path list defines the cache's shape:
           # without it, editing these paths silently restores an old-shaped cache and
