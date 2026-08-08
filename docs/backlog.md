@@ -429,11 +429,6 @@ them.** The three v0.1 entries that used to live here became M9.
   *shape* in the same commit that first tests the restore path would confound the
   result of that test.
 
-- **Nothing checks `ci.yml` before it is pushed.** A YAML error, or a step condition
-  that silently never fires, is discovered by a run. A parse-and-assert stage in
-  `verify.sh` would catch it locally — the same "fail at the right layer" argument that
-  produced M9.7. Small, and it wants its own task rather than a rider.
-
 - **Node is pinned only to a major.** `nvm install 22` takes the newest 22.x, so two
   machines can differ within the pin. Lower severity than Rust, SpacetimeDB or binaryen,
   none of which publish a module — but it is the same hermeticity argument, so it should
@@ -462,23 +457,23 @@ them.** The three v0.1 entries that used to live here became M9.
   message, would turn a confusing half-hour into one line of output. Cost one
   session most of an afternoon chasing failures that were not in the code.
 
-- **The `scope-guard` CI job has never run, not once.** It is gated on
-  `if: github.event_name == 'pull_request'`, and this repo's working agreement is to
-  work directly on `main` — zero pull requests have ever been opened, and all 14 runs
-  to date are `push` events, with the job reported `skipped` in every one sampled
-  (#1, #6, #14). So the check that exists because "the MVP's main failure mode is not
-  bugs, it is scope creep" has never looked at a diff. The two commits that changed a
-  scope contract — `c468e7d` adding `v0.2-scope.md` and `c619c68` activating it — went
-  past it unflagged. Sharpest detail: `c619c68` *fixed* this job, generalising its
-  regex away from a hardcoded `mvp-scope.md` with a comment noting it had "silently
-  stopped guarding anything" — a correct fix, to a job that could not run either
-  before or after it. The fix was one level too low. Note also that it only emits
-  `::warning::` and exits 0, so even when it runs it annotates rather than gates;
-  that part is deliberate. The cheap repair is to run it on `push` as well, diffing
-  `github.event.before...github.sha` with a fallback for the zero-sha first push.
-  Its own task, not a rider — and worth doing alongside the parked "nothing checks
-  `ci.yml` before it is pushed" entry above, which is the same class of fault:
-  a check nobody has watched fail.
+- **`scope-guard` has still never been *seen* running in CI.** Its trigger was fixed
+  after the investigation above found it skipped in all fourteen runs to date, and its
+  logic now lives in `scripts/scope-guard.sh`, which was exercised locally against real
+  commit ranges: `c619c68` (warns), `bc31cc2` (silent), a zero sha and a missing base
+  (both fall back to the parent and still warn), and a multi-commit range. That is
+  evidence about the script. It is **not** evidence that the job fires, which only a
+  push can produce — and the last time this job was repaired, the repair was correct
+  and changed nothing, because nobody checked whether the job ran at all. Confirm from
+  the next run's job list that `scope-guard` reports a conclusion rather than
+  `skipped`, then delete this entry. `./scripts/ci-status.sh` prints exactly that line.
+
+- **Nothing still checks `ci.yml` before it is pushed.** Moving the scope-guard logic
+  into a script narrowed this — that shell is now covered by the `shell-syntax` stage
+  and runnable by hand — but the YAML around it is not. The `if:` condition that made
+  the job inert for fourteen runs is exactly the class of fault a parse-and-assert
+  stage would catch, and it remains uncaught. Supersedes the earlier note above,
+  which asked for the same thing with a weaker argument.
 
 - **Durable identity is the strongest candidate for v0.3.** Once v0.2 is at a public URL,
   progress still lives in one browser's localStorage with no recovery path. Deferred here

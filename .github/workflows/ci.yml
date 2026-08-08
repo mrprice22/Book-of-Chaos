@@ -108,20 +108,28 @@ jobs:
 
   scope-guard:
     # The MVP's main failure mode is not bugs, it is scope creep. This makes an
-    # unreviewed scope change visible in the PR rather than discovered at release.
+    # unreviewed scope change visible on the run rather than discovered at release.
+    #
+    # Runs on push as well as pull_request, which is the whole point of it existing:
+    # this repo works directly on main, so the previous `pull_request`-only condition
+    # meant the job was skipped in every one of the first fourteen runs and never
+    # examined a diff. Both commits that moved the scope boundary went past it.
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v7
         with:
+          # The whole history, so the base commit of either event is present.
           fetch-depth: 0
       - name: Flag changes to the scope contract
+        # A push compares against the commit that was there before; a pull request
+        # against the merge base with its target. The script resolves an unusable
+        # base — zero sha, or a commit lost to a force-push — to the parent commit.
         run: |
-          # Matches any scope contract, not one named release. Pinning this to
-          # mvp-scope.md meant it silently stopped guarding anything the moment
-          # v0.2-scope.md became authoritative.
-          changed=$(git diff --name-only origin/${{ github.base_ref }}...HEAD \
-            | grep -E '^docs/(mvp|v[0-9]+\.[0-9]+)-scope\.md$' || true)
-          if [ -n "$changed" ]; then
-            echo "::warning::scope contract changed ($changed) — confirm the boundary moved deliberately."
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            ./scripts/scope-guard.sh \
+              "$(git merge-base "origin/${{ github.base_ref }}" "${{ github.sha }}")" \
+              "${{ github.sha }}"
+          else
+            ./scripts/scope-guard.sh "${{ github.event.before }}" "${{ github.sha }}"
           fi
