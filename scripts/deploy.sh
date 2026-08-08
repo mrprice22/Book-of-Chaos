@@ -23,6 +23,21 @@ CLIENT_PORT="${CLIENT_PORT:-5173}"
 LOG_DIR="$REPO/.devhome/logs"
 STDB_LOG="$LOG_DIR/spacetime.log"
 
+# The database lives in the repo's gitignored .devhome, not under ~/.local/share.
+#
+# Not a tidiness preference. SpacetimeDB's default puts `data/` beside `bin/` in
+# ~/.local/share/spacetime, and CI caches toolchain directories out of $HOME — so the
+# cache picked up a *database* along with the toolchain, while the identity that owns
+# it (~/.config/spacetime) was not cached. The next run restored someone else's
+# database, minted a fresh identity, and publishing failed `403 Forbidden ... not
+# authorized ... update database`, which surfaced four stages later as "webServer was
+# not able to start". That cost two diagnoses across two sessions.
+#
+# Excluding the path from the cache list fixes that instance. Moving the state out of
+# $HOME entirely fixes the class: nothing CI caches can reach it, so no future edit to
+# a path list can put it back.
+STDB_DATA_DIR="${SPACETIME_DATA_DIR:-$REPO/.devhome/spacetime-data}"
+
 log() { printf '\033[1;34m==>\033[0m %s\n' "$*" >&2; }
 die() {
   printf '\033[1;31merror:\033[0m %s\n' "$*" >&2
@@ -108,9 +123,9 @@ trap 'exit 0' INT TERM
 if stdb_up; then
   log "SpacetimeDB already running at $STDB_HOST — leaving it alone"
 else
-  mkdir -p "$LOG_DIR"
-  log "starting SpacetimeDB (log: ${STDB_LOG#"$REPO"/})"
-  run "spacetime start --listen-addr 0.0.0.0:$STDB_PORT" >"$STDB_LOG" 2>&1 &
+  mkdir -p "$LOG_DIR" "$STDB_DATA_DIR"
+  log "starting SpacetimeDB (log: ${STDB_LOG#"$REPO"/}, data: ${STDB_DATA_DIR#"$REPO"/})"
+  run "spacetime start --listen-addr 0.0.0.0:$STDB_PORT --data-dir '$STDB_DATA_DIR'" >"$STDB_LOG" 2>&1 &
   STDB_PID=$!
   STARTED_STDB=1
 

@@ -47,6 +47,10 @@ jobs:
           # A CI run should begin with no database anyway: caching one lets state
           # leak between commits and makes runs order-dependent.
           #
+          # As of M9.6 deploy.sh puts the database in the repo's .devhome instead, so
+          # `data/` no longer exists here at all. This narrowing stays as the second
+          # layer: the path list is what a future edit is most likely to get wrong.
+          #
           # ci.yml is in the key because this path list defines the cache's shape:
           # without it, editing these paths silently restores an old-shaped cache and
           # reintroduces exactly that bug.

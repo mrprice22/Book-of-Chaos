@@ -182,7 +182,7 @@ in the safety net that every later milestone's autonomy rests on.
       two runs of one commit can install different CLI versions. Add
       `SPACETIMEDB_VERSION` to `toolchain-versions.sh`, set `SPACETIME_DOWNLOAD_ROOT`,
       and guard on the reported version rather than on the CLI merely running
-- [ ] **M9.6** Move the database out of `$HOME`. `~/.local/share/spacetime` mixes the
+- [x] **M9.6** Move the database out of `$HOME`. `~/.local/share/spacetime` mixes the
       toolchain with the standalone database, so the cache path list has to stay exactly
       right forever. `deploy.sh` passes `--data-dir` under gitignored `.devhome/`, which
       CI never caches — the state becomes structurally uncacheable rather than
