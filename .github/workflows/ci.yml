@@ -31,8 +31,16 @@ jobs:
             ~/.rustup
             ~/.nvm
             ~/.local/bin
+            ~/.local/share/spacetime
             ~/.boc-env
-          key: toolchain-${{ runner.os }}-${{ hashFiles('scripts/install-toolchain.sh', 'scripts/dev.sh') }}
+          # ~/.local/share/spacetime holds the binaries the ~/.local/bin/spacetime
+          # launcher execs. Caching only the launcher restored a spacetime that could
+          # not run, and install-toolchain.sh skipped reinstalling it.
+          #
+          # ci.yml is in the key because this path list defines the cache's shape:
+          # without it, editing these paths silently restores an old-shaped cache and
+          # reintroduces exactly that bug.
+          key: toolchain-${{ runner.os }}-${{ hashFiles('scripts/install-toolchain.sh', 'scripts/dev.sh', '.github/workflows/ci.yml') }}
 
       - name: Install toolchain
         run: bash scripts/install-toolchain.sh

@@ -41,7 +41,14 @@ nvm install "$NODE_MAJOR"
 nvm alias default "$NODE_MAJOR"
 
 # --- SpacetimeDB ------------------------------------------------------------
-if ! command -v spacetime >/dev/null 2>&1; then
+# Tested by running it, not by `command -v`. The installer writes a small launcher to
+# ~/.local/bin/spacetime and the versioned binaries it execs to
+# ~/.local/share/spacetime/bin/. Those are two directories, so anything that restores
+# one without the other — a CI cache listing only ~/.local/bin, say — leaves a
+# spacetime on PATH that cannot run. `command -v` is satisfied by the launcher alone,
+# so the install was skipped and the break surfaced much later as "SpacetimeDB exited
+# during startup", with the real error four stages away from its cause.
+if ! spacetime --version >/dev/null 2>&1; then
   log "installing SpacetimeDB CLI"
   curl -sSf https://install.spacetimedb.com | sh -s -- --yes
 fi
