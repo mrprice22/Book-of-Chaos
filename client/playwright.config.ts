@@ -28,7 +28,22 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
 
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  /**
+   * Two projects so `verify.sh` can report them as separate stages, and so a broken
+   * authorization check does not show up under a name that says "smoke". They share
+   * one `webServer` — running them in one invocation each would bring the whole
+   * stack up twice.
+   *
+   * `auth-reject` declares no browser: it drives the SDK from Node.
+   */
+  projects: [
+    {
+      name: 'chromium',
+      testMatch: /smoke\.spec\.ts$/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    { name: 'auth-reject', testMatch: /auth-reject\.spec\.ts$/ },
+  ],
 
   webServer: {
     command: '../scripts/deploy.sh local',

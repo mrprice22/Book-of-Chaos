@@ -19,10 +19,10 @@ run once. Nothing else — no Rust, no Node, no SpacetimeDB on the host.
 ./scripts/verify.sh
 ```
 
-Expect `VERIFY GREEN  11 ran, 0 skipped`.
+Expect `VERIFY GREEN  12 ran, 0 skipped`.
 
-A stage reporting SKIP means its source directory is missing, which at v0.1 means
-something is wrong with the checkout rather than the milestone. Cold runs are slower:
+A stage reporting SKIP means its source directory is missing, which from v0.1 onward
+means something is wrong with the checkout rather than the milestone. Cold runs are slower:
 the Rust build and the Playwright browser download dominate.
 
 - [ ] Gate is green, nothing skipped

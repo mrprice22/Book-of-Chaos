@@ -140,9 +140,12 @@ by table-driven tests including every degenerate graph shape listed above.
 The three parking-lot entries, folded in. M9.1 is the one that matters: it closes a hole
 in the safety net that every later milestone's autonomy rests on.
 
-- [ ] **M9.1** `auth-reject` verify stage — a TS harness over the real SDK asserting all
-      six author writes are refused for a non-owner identity, run against the live
-      instance `e2e-smoke` already starts. Add the stage to `verify.sh` in the same commit
+- [x] **M9.1** `auth-reject` verify stage — a TS harness over the real SDK asserting all
+      **nine** owner-gated reducers are refused for a non-owner identity, run against the
+      live instance `e2e-smoke` already starts. Add the stage to `verify.sh` in the same
+      commit. (The "six author writes" this task was drafted with came from M7.4's
+      throwaway harness; the module actually has nine owner-gated reducers, and covering
+      six of them would have left three doors the gate does not watch.)
 - [ ] **M9.2** Bump `actions/checkout` and `actions/cache` to `@v5`; confirm from the run
       log that the Node 20 deprecation warning is actually gone, not just relocated
 - [ ] **M9.3** Install binaryen in **both** `Containerfile` and `scripts/install-toolchain.sh`,

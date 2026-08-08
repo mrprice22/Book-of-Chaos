@@ -124,7 +124,15 @@ stage "client-build"  "client/package.json" "cd client && npm run --silent build
 stage "seed-typecheck" "scripts/seed.ts" "cd client && npx tsc --noEmit -p tsconfig.seed.json"
 
 # --- End to end -------------------------------------------------------------
-stage "e2e-smoke"     "client/e2e" "cd client && npm run --silent test:e2e"
+# Two Playwright projects, two stages, so "authorization is broken" never arrives
+# wearing a label that says "smoke". Each invocation brings the stack up itself
+# (~25s); sharing one would mean one stage's failure could mask the other's.
+stage "e2e-smoke"     "client/e2e/smoke.spec.ts" \
+  "cd client && npm run --silent test:e2e -- --project=chromium"
+
+# The only check that would notice a `rules::require_owner` call being deleted.
+stage "auth-reject"   "client/e2e/auth-reject.spec.ts" \
+  "cd client && npm run --silent test:e2e -- --project=auth-reject"
 
 # --- Verdict ----------------------------------------------------------------
 [ "$LIST_ONLY" = 1 ] && exit 0
