@@ -458,8 +458,9 @@ domain and payment method, that autopilot cannot create. That is expected — M1
 open a `blocked.md` entry naming the exact credentials required and stop, rather than
 inventing infrastructure.
 
-- [ ] **M13.1** Choose and provision the hosted SpacetimeDB target (Maincloud or
-      self-hosted). Escalate for credentials
+- [~] **M13.1** Choose and provision the hosted SpacetimeDB target (Maincloud or
+      self-hosted). Escalate for credentials — **escalated 2026-08-08**, see
+      [blocked.md](./blocked.md)
 - [ ] **M13.2** `scripts/deploy.sh remote` publishes the module to that target; host and
       module name come from environment configuration, never a hardcoded `localhost`
 - [ ] **M13.3** Client static build deployed and reachable at a public URL

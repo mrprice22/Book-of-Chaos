@@ -36,7 +36,58 @@ didn't work" is not an entry.
 
 ## Open
 
-*(none)*
+### M13.1 — the hosted SpacetimeDB target needs an account only you can create
+**Date:** 2026-08-08
+
+**Tried:** Everything that can be established without an account. The CLI in the dev
+container is `spacetime 2.8.0`, and `spacetime server list` already knows two servers:
+`maincloud` (`https://maincloud.spacetimedb.com`, the default) and `local`
+(`http://127.0.0.1:3000`). Publishing to Maincloud needs `spacetime login`, which is an
+interactive browser flow against a spacetimedb.com account — it cannot be completed from
+here, and the resulting token is a credential that must not be committed. No account was
+created and no signup form was filled in.
+
+The code is already configuration-driven, so nothing is waiting on a decision except the
+decision itself: `scripts/deploy.sh` reads `SPACETIME_DB_NAME`, and the client reads
+`VITE_SPACETIME_URI` and `VITE_SPACETIME_DB_NAME`. What is hardcoded is only the
+*local* default (`http://localhost:3000`), which M13.2 replaces with a target chosen by
+environment.
+
+**Blocker:** Two things, both yours:
+
+1. **An account, and possibly a payment method.** Maincloud's free tier terms and any
+   card requirement are not something to guess at from here.
+2. **A globally unique database name.** Maincloud names are platform-wide, so
+   `book-of-chaos` may well be taken. This is a naming decision with a public
+   consequence, not an implementation detail to default.
+
+**Options:**
+
+- **Maincloud (recommended).** `spacetime login`, then `spacetime publish -s maincloud
+  <name>`. No server to run, no TLS to terminate, no upgrades to track. The costs are a
+  dependency on a hosted service and whatever its terms are. It is the smallest thing
+  that satisfies Definition of Done item 6 — "someone who has never cloned this
+  repository can open a link" — which is the whole point of M13.
+- **Self-hosted.** A VPS running `spacetime start` behind a reverse proxy with a
+  certificate. Full control, and a real ongoing operational surface: this repository has
+  no runbook for patching a server, and writing one is a milestone rather than a task.
+- **Defer M13 and ship v0.2 as local-only.** Honest, but it drops items 6 of the v0.2
+  Definition of Done, and the release's one-sentence scope says "both of them are doing
+  this at a public URL rather than on one laptop".
+
+Note that the *client* still needs somewhere to be served from — M13.3. That is a
+separate provider (any static host) and a separate account, and it is worth deciding
+both at once rather than discovering the second one here in a week.
+
+**Needs:** From you, one of:
+
+- "Maincloud, the database is called `<name>`" — plus a logged-in CLI. The login has to
+  happen in your terminal; in this session, `! ./scripts/dev.sh run 'spacetime login'`
+  runs it in the dev container so the token lands in `.devhome/` (which is gitignored)
+  rather than on the host.
+- "Self-host, here is the host and how to reach it."
+- "Defer M13" — in which case M12 is the end of the autopilot's queue and v0.2 ships
+  without item 6.
 
 ## Resolved
 
