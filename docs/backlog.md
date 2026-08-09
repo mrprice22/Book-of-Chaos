@@ -463,9 +463,17 @@ inventing infrastructure.
       2026-08-08**: Maincloud, database `book-of-chaos-83i7y`
 - [x] **M13.2** `scripts/deploy.sh remote` publishes the module to that target; host and
       module name come from environment configuration, never a hardcoded `localhost`
-- [ ] **M13.3** Client static build deployed and reachable at a public URL
-- [ ] **M13.4** CI deploys on tag push; `docs/testing-runbook.md` gains a section a human
-      can follow **without cloning the repo**
+- [~] **M13.3** Client static build deployed and reachable at a public URL — Cloudflare
+      Workers, `book-of-chaos.com`. Config committed (`client/wrangler.jsonc`,
+      `client/.env.production`); **completes on the next push**, when Cloudflare rebuilds
+- [ ] **M13.4** ~~CI deploys on tag push~~ **Amended 2026-08-08: deploys on push to
+      `main`.** Cloudflare's GitHub integration builds on branch pushes and has no
+      tag trigger, so tag-gating meant dropping that integration for a GitHub Actions
+      job plus a `CLOUDFLARE_API_TOKEN` secret. That is more machinery, and a second
+      credential, to gate a release nobody outside the project is waiting on yet.
+      Revisit if a mid-milestone commit going live ever actually costs something.
+      Still required: `docs/testing-runbook.md` gains a section a human can follow
+      **without cloning the repo**
 
 **Acceptance:** someone who has never cloned this repository can open a link, read the
 demo book, fail a quiz, pass it, and watch a node unlock.

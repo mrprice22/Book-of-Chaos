@@ -30,6 +30,10 @@ test-results/
 .env
 .env.*
 !.env.example
+# The hosted reader's build-time config. Not secrets — a public wss:// hostname and a
+# database name every connecting client already reveals. Committed so that the build
+# is reproducible off a clean clone instead of depending on dashboard settings.
+!client/.env.production
 
 # Editors / OS
 .DS_Store

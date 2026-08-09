@@ -1,0 +1,30 @@
+{
+  // Cloudflare Workers Static Assets. There is no Worker script: this is a purely
+  // static bundle, so `assets` is the whole configuration.
+  //
+  // Workers rather than Pages because Cloudflare's own guidance is that new projects
+  // should start on Workers — Pages still works, but the feature and optimisation
+  // work is going to Workers. Static asset requests are not billed.
+  //
+  // `name` must match the Worker that already exists, or a deploy creates a *second*
+  // Worker on a different subdomain and the custom domain keeps pointing at the old
+  // one. This is the name in book-of-chaos.jamesprice-slightlyepic.workers.dev.
+  "name": "book-of-chaos",
+  "compatibility_date": "2026-08-08",
+  "assets": {
+    // Relative to this file, i.e. client/dist — the Vite build output, not the
+    // source tree. Serving the source tree yields a page with the right <title> and
+    // a blank body, because index.html then points at /src/main.tsx and the browser
+    // will not execute TypeScript.
+    "directory": "./dist/",
+
+    // Serve index.html with 200 for any path that is not a file on disk.
+    //
+    // Load-bearing, not a nicety. Routing is history-based (src/routing/route.ts),
+    // so /chapter/7 and /author/book/1 are real URLs a reader can bookmark, land on,
+    // or refresh. Without this they 404 — and one of those URLs is the subject of a
+    // smoke test: "a blocked chapter is locked, and stays locked at its own URL".
+    // That guarantee would break in production while passing locally.
+    "not_found_handling": "single-page-application"
+  }
+}
