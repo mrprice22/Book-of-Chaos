@@ -1,6 +1,7 @@
 import { t } from '../i18n';
 import type { Chapter, KnowledgeBlock } from '../module_bindings/types';
 import { inReadingOrder } from './blockOrder';
+import type { BlockState } from './blockState';
 import { QuizBlock } from './QuizBlock';
 import type { QuizAnswer, QuizView } from './quizModel';
 
@@ -8,6 +9,12 @@ export type ChapterViewProps = {
   chapter: Chapter;
   blocks: readonly KnowledgeBlock[];
   completedBlockIds: ReadonlySet<bigint>;
+  /**
+   * Each block's state from its own prerequisites (M12). A block missing from the
+   * map is treated as `Available`: this component is presentational, and the one
+   * caller that knows about prerequisites supplies every block it renders.
+   */
+  blockStates: ReadonlyMap<bigint, BlockState>;
   onComplete: (blockId: bigint) => void;
   /** The quiz on a `Quiz` block, by block id. Absent means nobody has written it. */
   quizzes: ReadonlyMap<bigint, QuizView>;
@@ -44,6 +51,7 @@ export function ChapterView({
   chapter,
   blocks,
   completedBlockIds,
+  blockStates,
   onComplete,
   quizzes,
   onSubmitQuiz,
@@ -76,6 +84,24 @@ export function ChapterView({
           {ordered.map((block) => {
             const done = completedBlockIds.has(block.blockId);
             const isQuiz = block.blockType.tag === 'Quiz';
+            const locked = blockStates.get(block.blockId) === 'Locked';
+
+            // A locked block shows its title and why it is locked, and nothing
+            // else. Not merely a disabled button: the body of the block it is
+            // gating — a quiz's questions especially — is the thing the reader
+            // has not earned yet, so hiding the control while rendering the
+            // content would gate the button rather than the block. The chapter
+            // above it is open, which is the case this exists for.
+            if (locked) {
+              return (
+                <li key={String(block.blockId)} data-complete={false} data-state="Locked">
+                  <h3>{block.title}</h3>
+                  <p className="locked">{t('block.locked')}</p>
+                  <p>{t('block.lockedReason')}</p>
+                </li>
+              );
+            }
+
             return (
               <li key={String(block.blockId)} data-complete={done}>
                 <h3>{block.title}</h3>

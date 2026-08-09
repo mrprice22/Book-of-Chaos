@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { Identity, getQueryAccessorName } from 'spacetimedb';
 import {
   aBlock,
+  aBlockDep,
   aChapter,
   anAttempt,
   anOption,
@@ -139,6 +140,57 @@ describe('ChapterScreen', () => {
     };
     render(<ChapterScreen chapterId={10n} />);
     expect(screen.getByRole('button', { name: /mark as complete/i })).toBeInTheDocument();
+  });
+
+  it('locks a block whose prerequisite is unread, inside an open chapter', () => {
+    // The two gates composing: the chapter is open — its first block offers a
+    // button — and only the second block is held back. A chapter-level lock
+    // would have hidden both.
+    sdk.rows = {
+      ...sdk.rows,
+      knowledgeBlocks: [
+        aBlock({ blockId: 100n, chapterId: 10n, title: 'Intro' }),
+        aBlock({ blockId: 101n, chapterId: 10n, title: 'Later', position: 1 }),
+      ],
+      blockDeps: [aBlockDep(101n, 100n)],
+    };
+    const { rerender } = render(<ChapterScreen chapterId={10n} />);
+
+    expect(screen.getByText(/this block is locked/i)).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /mark as complete/i })).toHaveLength(1);
+
+    // Reading the prerequisite opens it, from the subscription alone.
+    sdk.rows = {
+      ...sdk.rows,
+      readerProgress: [someProgress({ identity: READER, blockId: 100n })],
+    };
+    rerender(<ChapterScreen chapterId={10n} />);
+
+    expect(screen.queryByText(/this block is locked/i)).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /mark as complete/i })).toHaveLength(1);
+  });
+
+  it('locks a block whose prerequisite lives in another chapter', () => {
+    // The edge the graph has to be built book-wide to see at all.
+    sdk.rows = {
+      chapters: [
+        aChapter({ chapterId: 9n, title: 'Elsewhere' }),
+        aChapter({ chapterId: 10n, title: 'Attractors' }),
+      ],
+      knowledgeBlocks: [
+        aBlock({ blockId: 90n, chapterId: 9n }),
+        aBlock({ blockId: 100n, chapterId: 10n, title: 'Intro' }),
+      ],
+      chapterDeps: [],
+      blockDeps: [aBlockDep(100n, 90n)],
+      readerProgress: [],
+    };
+    render(<ChapterScreen chapterId={10n} />);
+
+    expect(screen.getByText(/this block is locked/i)).toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /mark as complete/i }),
+    ).not.toBeInTheDocument();
   });
 
   it('locks a blocked chapter reached by direct URL, with no way to complete it', () => {

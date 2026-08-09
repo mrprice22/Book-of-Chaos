@@ -13,6 +13,7 @@ function renderView(props: Partial<Parameters<typeof ChapterView>[0]> = {}) {
       chapter={aChapter({ title: 'Strange Attractors' })}
       blocks={[aBlock()]}
       completedBlockIds={new Set()}
+      blockStates={new Map()}
       onComplete={onComplete}
       quizzes={new Map()}
       onSubmitQuiz={onSubmitQuiz}
@@ -159,6 +160,51 @@ describe('ChapterView', () => {
     expect(
       screen.queryByRole('button', { name: /mark as complete/i }),
     ).not.toBeInTheDocument();
+  });
+
+  it('locks a block whose prerequisites are unmet, inside an open chapter', () => {
+    // The M12 case: the chapter is reachable — the sibling block below renders
+    // its button — and only this block is held back.
+    renderView({
+      blocks: [
+        aBlock({ blockId: 1n, title: 'Read me first', position: 0 }),
+        aBlock({ blockId: 2n, title: 'Waits on the first', position: 1 }),
+      ],
+      blockStates: new Map([
+        [1n, 'Available'],
+        [2n, 'Locked'],
+      ]),
+    });
+    expect(screen.getByText(/this block is locked/i)).toBeInTheDocument();
+    // One button, belonging to the block that is not locked.
+    expect(screen.getAllByRole('button', { name: /mark as complete/i })).toHaveLength(1);
+  });
+
+  it('withholds a locked block’s body, not just its button', () => {
+    // "Not merely hidden": a disabled control over readable content would gate
+    // the button rather than the block, and for a quiz the content *is* the
+    // thing being gated.
+    renderView({
+      blocks: [
+        aBlock({ blockId: 2n, bodyHtml: '<p>The secret of the second block</p>' }),
+      ],
+      blockStates: new Map([[2n, 'Locked']]),
+    });
+    expect(screen.queryByText(/secret of the second block/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: /mark as complete/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('gives a locked quiz block no form to submit', () => {
+    renderView({
+      blocks: [aBlock({ blockId: 100n, blockType: { tag: 'Quiz' } })],
+      quizzes: new Map([[100n, A_QUIZ]]),
+      blockStates: new Map([[100n, 'Locked']]),
+    });
+    expect(screen.getByText(/this block is locked/i)).toBeInTheDocument();
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /submit/i })).not.toBeInTheDocument();
   });
 
   it('goes back to the book', async () => {

@@ -417,8 +417,20 @@ key never appears in the page source or in any subscription the client holds.
       `Graph::block` searches book-wide, because a prerequisite may live in another
       chapter; a dangling one fails closed even when the reader has "completed" the
       missing id, which is the case a presence check alone would wave through
-- [ ] **M12.3** Client: prerequisite-locked blocks are visibly locked within an otherwise
-      Available chapter, and their controls are not merely hidden
+- [x] **M12.3** Client: prerequisite-locked blocks are visibly locked within an otherwise
+      Available chapter, and their controls are not merely hidden.
+      `blockState.ts` mirrors `unlock::block_state` and carries its **own** graph
+      builder rather than a field on `chapterState.ts`'s: that graph is built by the
+      map too, which has no use for block edges, and handing it an empty list would
+      have made every block look unlocked. The mirroring is now the second pair of
+      the duplication the parking lot names — the entry has been updated to say it
+      landed rather than that it is coming.
+      **A locked block renders its title and why it is locked, and nothing else.**
+      Hiding only the control would gate the button rather than the block, and for a
+      quiz the questions *are* what is being gated. `ChapterScreen` waits on
+      `blockDeps` alongside the other tables for the same reason: a block whose edges
+      have not arrived yet would render unlocked, which is the one direction this
+      must not fail in
 - [ ] **M12.4** Table-driven tests including the degenerate shapes M3.4 established:
       chain, diamond, self-cycle, multi-node cycle, cross-chapter edge, empty set
 
@@ -452,11 +464,14 @@ demo book, fail a quiz, pass it, and watch a node unlock.
 Ideas encountered while building that are out of scope. **Append here instead of building
 them.** The three v0.1 entries that used to live here became M9.
 
-- **Chapter state is computed twice — once in Rust, once in TypeScript.** M3.3 derives
+- **Unlock state is computed twice — once in Rust, once in TypeScript.** M3.3 derives
   chapter state on read rather than materialising it, so the map computes the same four
-  states client-side. Revisit only if the two ever disagree. Note that M12 adds a second
-  instance of this shape for block state, which strengthens the case for revisiting it —
-  and would double the cost of getting it wrong.
+  states client-side. Revisit only if the two ever disagree. **M12.3 landed the second
+  instance** this entry used to predict: `client/src/reader/blockState.ts` mirrors
+  `unlock::block_state`, so there are now two pairs to keep in step rather than one. Its
+  test file states the mirroring explicitly and repeats the Rust cases, which is the
+  cheap half of the fix; the expensive half — deriving one from the other — is still
+  not done.
 
 - **Cache keys are coarser than they need to be.** The toolchain key hashes the whole
   of `ci.yml`, so editing a comment there busts a ~200M cache and forces a full

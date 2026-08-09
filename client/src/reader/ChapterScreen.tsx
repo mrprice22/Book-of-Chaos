@@ -6,6 +6,8 @@ import { HOME_PATH, navigate } from '../routing/route';
 import { ChapterView } from './ChapterView';
 import type { ChapterViewProps } from './ChapterView';
 import { buildGraph, chapterState } from './chapterState';
+import { blockState, buildBlockGraph } from './blockState';
+import type { BlockState } from './blockState';
 import { buildQuiz } from './quizModel';
 import type { QuizAnswer, QuizView } from './quizModel';
 
@@ -30,6 +32,7 @@ export function ChapterScreen({ chapterId }: { chapterId: bigint }) {
   const [chapters, chaptersReady] = useTable(tables.chapters);
   const [blocks, blocksReady] = useTable(tables.knowledgeBlocks);
   const [deps, depsReady] = useTable(tables.chapterDeps);
+  const [blockDeps, blockDepsReady] = useTable(tables.blockDeps);
   const [progress] = useTable(tables.readerProgress);
   const [quizConfigs] = useTable(tables.quizConfig);
   const [quizQuestions] = useTable(tables.quizQuestions);
@@ -40,7 +43,9 @@ export function ChapterScreen({ chapterId }: { chapterId: bigint }) {
   const submitQuiz = useReducer(reducers.submitQuiz);
   const [error, setError] = useState<ChapterViewProps['error']>(undefined);
 
-  if (!chaptersReady || !blocksReady || !depsReady) {
+  // `blockDeps` is waited on with the rest: a block whose edges have not arrived yet
+  // would render as unlocked, which is the one direction this must never fail in.
+  if (!chaptersReady || !blocksReady || !depsReady || !blockDepsReady) {
     return <p className="chapter-status">{t('book.loading')}</p>;
   }
 
@@ -100,6 +105,18 @@ export function ChapterScreen({ chapterId }: { chapterId: bigint }) {
   };
 
   const chapterBlocks = blocks.filter((b) => b.chapterId === chapterId);
+
+  // The block half of the gate, beside the chapter half above rather than instead
+  // of it — the same composition the two reducers make. Built book-wide because a
+  // prerequisite may live in another chapter.
+  const blockGraph = buildBlockGraph(chapter.bookId, chapters, blocks, blockDeps);
+  const blockStates = new Map<bigint, BlockState>(
+    chapterBlocks.map((b) => [
+      b.blockId,
+      blockState(blockGraph, completedBlockIds, b.blockId),
+    ]),
+  );
+
   const quizzes = new Map<bigint, QuizView>();
   for (const block of chapterBlocks) {
     if (block.blockType.tag !== 'Quiz') continue;
@@ -124,6 +141,7 @@ export function ChapterScreen({ chapterId }: { chapterId: bigint }) {
       chapter={chapter}
       blocks={chapterBlocks}
       completedBlockIds={completedBlockIds}
+      blockStates={blockStates}
       onComplete={onComplete}
       quizzes={quizzes}
       onSubmitQuiz={onSubmitQuiz}

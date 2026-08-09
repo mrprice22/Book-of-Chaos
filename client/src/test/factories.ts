@@ -1,5 +1,6 @@
 import { Identity, Timestamp } from 'spacetimedb';
 import type {
+  BlockDep,
   Book,
   Chapter,
   KnowledgeBlock,
@@ -61,6 +62,11 @@ export function aBlock(overrides: Partial<KnowledgeBlock> = {}): KnowledgeBlock 
     updatedAt: NOW,
     ...overrides,
   };
+}
+
+/** `blockId` waits on `dependsOnBlockId` — the edge, in the direction the table stores it. */
+export function aBlockDep(blockId: bigint, dependsOnBlockId: bigint): BlockDep {
+  return { depId: blockId * 1000n + dependsOnBlockId, blockId, dependsOnBlockId };
 }
 
 export function someProgress(overrides: Partial<ReaderProgress> = {}): ReaderProgress {

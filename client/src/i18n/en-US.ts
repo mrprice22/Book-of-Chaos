@@ -75,6 +75,8 @@ export const enUS = {
   'block.completed': 'Completed',
   'block.openResource': 'Open resource',
   'block.completeFailed': 'Could not mark that complete: {reason}',
+  'block.locked': 'This block is locked.',
+  'block.lockedReason': 'Finish what it depends on first.',
   'quiz.notWritten': 'This quiz has not been written yet.',
   'quiz.threshold': 'Pass mark: {threshold}%',
   'quiz.chooseOne': 'Choose one answer.',
