@@ -13,12 +13,16 @@
 pub type ChapterId = u64;
 pub type BlockId = u64;
 
-/// A block, reduced to the two facts unlocking cares about.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// A block, reduced to the facts unlocking cares about.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BlockNode {
     pub block_id: BlockId,
     /// Optional blocks do not hold their chapter back from Complete.
     pub is_optional: bool,
+    /// The blocks this one waits on (M12). They may live in any chapter of the
+    /// same book, which is why `Graph::block` searches book-wide rather than
+    /// within one chapter's list.
+    pub prerequisites: Vec<BlockId>,
 }
 
 /// A chapter and its edges, as the engine sees it.
@@ -53,6 +57,23 @@ impl Graph {
 
     pub fn chapter(&self, chapter_id: ChapterId) -> Option<&ChapterNode> {
         self.chapters.iter().find(|c| c.chapter_id == chapter_id)
+    }
+
+    /// A block anywhere in the book, with the chapter that holds it.
+    ///
+    /// Book-wide rather than chapter-wide because a block's prerequisites may
+    /// cross chapters — see [`BlockNode::prerequisites`]. The chapter comes back
+    /// with it because no caller has yet wanted one without the other, and
+    /// finding a block without knowing where it lives is how the two gates would
+    /// drift apart.
+    pub fn block(&self, block_id: BlockId) -> Option<(&ChapterNode, &BlockNode)> {
+        self.chapters.iter().find_map(|chapter| {
+            chapter
+                .blocks
+                .iter()
+                .find(|b| b.block_id == block_id)
+                .map(|block| (chapter, block))
+        })
     }
 }
 
@@ -147,6 +168,60 @@ pub fn chapter_state(graph: &Graph, progress: &Progress, chapter_id: ChapterId) 
         ChapterState::InProgress
     } else {
         ChapterState::Available
+    }
+}
+
+/// The three states a block can be in for a reader (M12).
+///
+/// Three rather than the chapter's four: a block has no "in progress". It is
+/// done or it is not, because completion is a single `reader_progress` row.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BlockState {
+    /// A prerequisite block is not yet complete.
+    Locked,
+    /// Open, and not yet done.
+    Available,
+    Complete,
+}
+
+/// The reader's state for one block, from its **own** prerequisites only.
+///
+/// Deliberately silent about the chapter. Chapter gating and block gating are two
+/// separate rules and this function answers one of them: the reducers call
+/// `require_reachable_chapter` *and* `require_unlocked_block`, so neither can
+/// override the other. Folding the chapter in here would have made a satisfied
+/// block prerequisite look like it unlocked a block inside a Blocked chapter, or
+/// — worse in the other direction — an Available chapter look like it unlocked a
+/// block whose own prerequisites are unmet. Keeping them separate is also what
+/// lets the client show a locked block *inside* an otherwise open chapter (M12.3)
+/// and say which of the two reasons applies.
+///
+/// The three decisions, mirroring `chapter_state`:
+///
+/// 1. **Complete wins over Locked.** An author adding a prerequisite to a block a
+///    reader has already finished does not take it back off them.
+/// 2. A prerequisite that is not in the graph is treated as *not* complete —
+///    fail closed, exactly like a dangling chapter edge. `delete_block` clears
+///    edges in both directions so this should not arise, but a dangling edge must
+///    never be the thing that opens a block.
+/// 3. An unknown `block_id` is `Locked`, for the same reason.
+pub fn block_state(graph: &Graph, progress: &Progress, block_id: BlockId) -> BlockState {
+    let Some((_, block)) = graph.block(block_id) else {
+        return BlockState::Locked;
+    };
+
+    if progress.has_completed(block_id) {
+        return BlockState::Complete;
+    }
+
+    let unlocked = block
+        .prerequisites
+        .iter()
+        .all(|prereq| graph.block(*prereq).is_some() && progress.has_completed(*prereq));
+    if unlocked {
+        BlockState::Available
+    } else {
+        BlockState::Locked
     }
 }
 
@@ -266,6 +341,7 @@ mod tests {
                 .map(|n| BlockNode {
                     block_id: chapter_id * 100 + n as BlockId,
                     is_optional: false,
+                    prerequisites: Vec::new(),
                 })
                 .collect(),
         }
@@ -416,6 +492,154 @@ mod tests {
         let graph = Graph::new(vec![chapter(1, &[], 1), chapter(2, &[], 1)]);
         let progress = Progress::from_completed_blocks([block(1, 0)]);
         assert_eq!(chapter_state(&graph, &progress, 2), ChapterState::Available);
+    }
+
+    // --- block state ---------------------------------------------------------
+
+    /// Give one of a chapter's blocks a prerequisite set.
+    fn requires(mut c: ChapterNode, block_id: BlockId, prerequisites: &[BlockId]) -> ChapterNode {
+        let target = c
+            .blocks
+            .iter_mut()
+            .find(|b| b.block_id == block_id)
+            .expect("test fixture named a block the chapter does not have");
+        target.prerequisites = prerequisites.to_vec();
+        c
+    }
+
+    #[test]
+    fn a_block_with_no_prerequisites_is_available() {
+        let graph = Graph::new(vec![chapter(1, &[], 2)]);
+        assert_eq!(
+            block_state(&graph, &Progress::default(), block(1, 1)),
+            BlockState::Available
+        );
+    }
+
+    #[test]
+    fn a_block_waiting_on_an_unread_block_is_locked() {
+        let graph = Graph::new(vec![requires(
+            chapter(1, &[], 2),
+            block(1, 1),
+            &[block(1, 0)],
+        )]);
+        assert_eq!(
+            block_state(&graph, &Progress::default(), block(1, 1)),
+            BlockState::Locked
+        );
+    }
+
+    #[test]
+    fn reading_the_prerequisite_unlocks_the_block() {
+        let graph = Graph::new(vec![requires(
+            chapter(1, &[], 2),
+            block(1, 1),
+            &[block(1, 0)],
+        )]);
+        let progress = Progress::from_completed_blocks([block(1, 0)]);
+        assert_eq!(
+            block_state(&graph, &progress, block(1, 0)),
+            BlockState::Complete
+        );
+        assert_eq!(
+            block_state(&graph, &progress, block(1, 1)),
+            BlockState::Available
+        );
+    }
+
+    #[test]
+    fn a_prerequisite_may_live_in_another_chapter() {
+        // The v0.2 scope's wording — "within its chapter or across chapters" — so
+        // the lookup has to be book-wide. A chapter-scoped search would report
+        // this edge as dangling and lock the block forever.
+        let graph = Graph::new(vec![
+            chapter(1, &[], 1),
+            requires(chapter(2, &[], 1), block(2, 0), &[block(1, 0)]),
+        ]);
+        assert_eq!(
+            block_state(&graph, &Progress::default(), block(2, 0)),
+            BlockState::Locked
+        );
+        let progress = Progress::from_completed_blocks([block(1, 0)]);
+        assert_eq!(
+            block_state(&graph, &progress, block(2, 0)),
+            BlockState::Available
+        );
+    }
+
+    #[test]
+    fn every_block_prerequisite_must_be_complete_not_just_one() {
+        let graph = Graph::new(vec![requires(
+            chapter(1, &[], 3),
+            block(1, 2),
+            &[block(1, 0), block(1, 1)],
+        )]);
+        let half = Progress::from_completed_blocks([block(1, 0)]);
+        assert_eq!(block_state(&graph, &half, block(1, 2)), BlockState::Locked);
+        let both = Progress::from_completed_blocks([block(1, 0), block(1, 1)]);
+        assert_eq!(
+            block_state(&graph, &both, block(1, 2)),
+            BlockState::Available
+        );
+    }
+
+    #[test]
+    fn a_finished_block_does_not_relock_when_a_prerequisite_is_added() {
+        // The block-scale twin of the chapter rule: an author drawing a new edge
+        // does not take work back off a reader who already did it.
+        let graph = Graph::new(vec![requires(
+            chapter(1, &[], 2),
+            block(1, 1),
+            &[block(1, 0)],
+        )]);
+        let progress = Progress::from_completed_blocks([block(1, 1)]);
+        assert_eq!(
+            block_state(&graph, &progress, block(1, 1)),
+            BlockState::Complete
+        );
+    }
+
+    #[test]
+    fn a_dangling_block_prerequisite_fails_closed() {
+        // `delete_block` clears edges in both directions, so this should not
+        // arise — but a dangling edge must never be the thing that opens a block,
+        // however the graph came to be that way. Note the reader has "completed"
+        // the missing id, which is the case a presence check alone would pass.
+        let graph = Graph::new(vec![requires(chapter(1, &[], 1), block(1, 0), &[999])]);
+        let progress = Progress::from_completed_blocks([999]);
+        assert_eq!(
+            block_state(&graph, &progress, block(1, 0)),
+            BlockState::Locked
+        );
+    }
+
+    #[test]
+    fn an_unknown_block_is_locked() {
+        let graph = Graph::new(vec![chapter(1, &[], 1)]);
+        assert_eq!(
+            block_state(&graph, &Progress::default(), 4242),
+            BlockState::Locked
+        );
+        assert_eq!(
+            block_state(&Graph::default(), &Progress::default(), 4242),
+            BlockState::Locked
+        );
+    }
+
+    #[test]
+    fn block_state_says_nothing_about_the_chapter() {
+        // The two gates are separate rules, composed by the reducers. A block
+        // whose own prerequisites are met is Available even inside a Blocked
+        // chapter — and it is `require_reachable_chapter`, not this function,
+        // that keeps the reader out. Folding the chapter in here would make the
+        // client unable to say *which* of the two locks a reader is looking at.
+        let graph = Graph::new(vec![chapter(1, &[], 1), chapter(2, &[1], 1)]);
+        let progress = Progress::default();
+        assert_eq!(chapter_state(&graph, &progress, 2), ChapterState::Blocked);
+        assert_eq!(
+            block_state(&graph, &progress, block(2, 0)),
+            BlockState::Available
+        );
     }
 
     // --- cycles, over a bare edge list --------------------------------------

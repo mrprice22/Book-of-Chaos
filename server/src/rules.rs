@@ -509,6 +509,30 @@ pub fn require_reachable_chapter(state: crate::unlock::ChapterState) -> Result<(
     }
 }
 
+/// Whether a reader may touch a block at all, given its own prerequisites.
+///
+/// The block-scale twin of `require_reachable_chapter`, and called *beside* it
+/// rather than instead of it: the two gates compose, and neither may override the
+/// other. A chapter the reader has reached does not open a block whose
+/// prerequisites are unmet, and a satisfied block prerequisite does not open a
+/// block inside a chapter the reader has not reached.
+///
+/// `Complete` is allowed through so a re-submission or a repeat call stays
+/// idempotent rather than erroring — the same reading `require_reachable_chapter`
+/// takes of a Complete chapter.
+///
+/// The message names the block rather than the chapter, because the two are
+/// different things for the reader to go and do, and "finish the prerequisites"
+/// with no clue which ones is the kind of toast that gets screenshotted.
+pub fn require_unlocked_block(state: crate::unlock::BlockState) -> Result<(), String> {
+    match state {
+        crate::unlock::BlockState::Locked => {
+            Err("Finish what this block depends on first.".to_string())
+        }
+        _ => Ok(()),
+    }
+}
+
 /// Whether a reader may mark a block complete by asserting they have read it.
 ///
 /// `is_quiz` closes the hole M10.1 opened. A `Quiz` block completes *only* on a
@@ -518,11 +542,18 @@ pub fn require_reachable_chapter(state: crate::unlock::ChapterState) -> Result<(
 /// on the v0.2 block type, and the answer key being unreachable would stop
 /// mattering because nobody would need it.
 ///
-/// The chapter check runs first: an unreachable chapter is the coarser fact, and
-/// the reply should not confirm what kind of block sits inside a chapter the
-/// reader has not earned.
-pub fn can_complete_block(state: crate::unlock::ChapterState, is_quiz: bool) -> Result<(), String> {
-    require_reachable_chapter(state)?;
+/// The three checks run coarsest first — chapter, then the block's own
+/// prerequisites, then what kind of block it is. Each reply should reveal only
+/// what the reader has already earned the right to know: the type of a block
+/// inside a chapter they have not reached is not their business yet, and "answer
+/// this quiz" is a misleading instruction for a block they cannot open anyway.
+pub fn can_complete_block(
+    chapter: crate::unlock::ChapterState,
+    block: crate::unlock::BlockState,
+    is_quiz: bool,
+) -> Result<(), String> {
+    require_reachable_chapter(chapter)?;
+    require_unlocked_block(block)?;
     if is_quiz {
         return Err("Answer this quiz to complete it.".to_string());
     }
@@ -656,7 +687,7 @@ pub fn grade_quiz(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::unlock::ChapterState;
+    use crate::unlock::{BlockState, ChapterState};
 
     #[test]
     fn accepts_a_plain_username() {
@@ -1051,21 +1082,61 @@ mod tests {
 
     #[test]
     fn a_reader_may_complete_blocks_in_a_reachable_chapter() {
-        assert!(can_complete_block(ChapterState::Available, false).is_ok());
-        assert!(can_complete_block(ChapterState::InProgress, false).is_ok());
+        assert!(can_complete_block(ChapterState::Available, BlockState::Available, false).is_ok());
+        assert!(can_complete_block(ChapterState::InProgress, BlockState::Available, false).is_ok());
         // A finished chapter can still have optional blocks left to read.
-        assert!(can_complete_block(ChapterState::Complete, false).is_ok());
+        assert!(can_complete_block(ChapterState::Complete, BlockState::Available, false).is_ok());
+        // And a block already done stays idempotent rather than erroring.
+        assert!(can_complete_block(ChapterState::InProgress, BlockState::Complete, false).is_ok());
     }
 
     #[test]
     fn a_reader_may_not_complete_blocks_in_a_blocked_chapter() {
         // The load-bearing case: a hostile client calling the reducer directly
         // must not be able to walk itself through a locked book.
-        let err = can_complete_block(ChapterState::Blocked, false).unwrap_err();
+        let err =
+            can_complete_block(ChapterState::Blocked, BlockState::Available, false).unwrap_err();
         assert!(err.contains("prerequisites"), "unhelpful message: {err}");
         // And the same for a quiz block, by the other route.
         assert!(require_reachable_chapter(ChapterState::Blocked).is_err());
         assert!(require_reachable_chapter(ChapterState::Available).is_ok());
+    }
+
+    #[test]
+    fn a_reader_may_not_complete_a_block_whose_own_prerequisites_are_unmet() {
+        // The block-scale twin, and the half an open chapter must not override:
+        // every reachable chapter state still refuses a Locked block.
+        for chapter in [
+            ChapterState::Available,
+            ChapterState::InProgress,
+            ChapterState::Complete,
+        ] {
+            let err = can_complete_block(chapter, BlockState::Locked, false).unwrap_err();
+            assert!(err.contains("depends on"), "unhelpful message: {err}");
+        }
+        assert!(require_unlocked_block(BlockState::Locked).is_err());
+        assert!(require_unlocked_block(BlockState::Available).is_ok());
+        assert!(require_unlocked_block(BlockState::Complete).is_ok());
+    }
+
+    #[test]
+    fn the_two_gates_do_not_override_each_other() {
+        // Neither direction may open the other's door. A satisfied block
+        // prerequisite does not survive a Blocked chapter, and a reachable
+        // chapter does not survive a Locked block — and the message says which,
+        // so the reader is told what to go and do.
+        let by_chapter =
+            can_complete_block(ChapterState::Blocked, BlockState::Available, false).unwrap_err();
+        assert!(by_chapter.contains("chapter"), "unhelpful: {by_chapter}");
+
+        let by_block =
+            can_complete_block(ChapterState::Available, BlockState::Locked, false).unwrap_err();
+        assert!(by_block.contains("block"), "unhelpful: {by_block}");
+
+        // Both shut at once still reports the coarser one.
+        let both =
+            can_complete_block(ChapterState::Blocked, BlockState::Locked, false).unwrap_err();
+        assert_eq!(both, by_chapter);
     }
 
     #[test]
@@ -1078,7 +1149,7 @@ mod tests {
             ChapterState::InProgress,
             ChapterState::Complete,
         ] {
-            let err = can_complete_block(state, true).unwrap_err();
+            let err = can_complete_block(state, BlockState::Available, true).unwrap_err();
             assert!(err.contains("quiz"), "unhelpful message: {err}");
         }
     }
@@ -1087,8 +1158,18 @@ mod tests {
     fn an_unreachable_chapter_is_reported_before_the_block_type() {
         // A reader who has not earned the chapter should be told that, rather
         // than what kind of block is waiting inside it.
-        let err = can_complete_block(ChapterState::Blocked, true).unwrap_err();
+        let err =
+            can_complete_block(ChapterState::Blocked, BlockState::Available, true).unwrap_err();
         assert!(err.contains("prerequisites"), "unhelpful message: {err}");
+    }
+
+    #[test]
+    fn a_locked_block_is_reported_before_the_block_type() {
+        // "Answer this quiz to complete it" is a misleading instruction for a
+        // block the reader cannot open yet.
+        let err =
+            can_complete_block(ChapterState::Available, BlockState::Locked, true).unwrap_err();
+        assert!(err.contains("depends on"), "unhelpful message: {err}");
     }
 
     // --- grading -------------------------------------------------------------

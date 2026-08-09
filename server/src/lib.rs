@@ -1051,7 +1051,9 @@ fn clear_quiz(ctx: &ReducerContext, block_id: u64) {
 /// The chapter's unlock state is recomputed *before* the write and the call is
 /// refused if the chapter is Blocked. Without that, a client could call this
 /// reducer directly for every block in a locked book and unlock it one call at
-/// a time — the map is UX, this is the boundary.
+/// a time — the map is UX, this is the boundary. Since M12 the block's own
+/// prerequisites are checked beside the chapter's, not instead of them: two gates
+/// that compose, neither able to override the other.
 ///
 /// A `Quiz` block is refused outright: it completes only through `submit_quiz`,
 /// with a passing score. This reducer predates `BlockType::Quiz` and would
@@ -1070,6 +1072,7 @@ pub fn complete_block(ctx: &ReducerContext, block_id: u64) -> Result<(), String>
     let progress = progress_for_reader(ctx, reader);
     rules::can_complete_block(
         unlock::chapter_state(&graph, &progress, chapter.chapter_id),
+        unlock::block_state(&graph, &progress, block_id),
         block.block_type == BlockType::Quiz,
     )?;
 
@@ -1131,6 +1134,10 @@ pub fn submit_quiz(
     let graph = graph_for_book(ctx, chapter.book_id);
     let progress = progress_for_reader(ctx, reader);
     rules::require_reachable_chapter(unlock::chapter_state(&graph, &progress, chapter.chapter_id))?;
+    // The block's own prerequisites, beside the chapter's rather than instead of
+    // them — a quiz sitting behind an unread block is no more submittable than a
+    // quiz in a chapter the reader has not reached.
+    rules::require_unlocked_block(unlock::block_state(&graph, &progress, block_id))?;
 
     let config = ctx
         .db
@@ -1239,6 +1246,13 @@ fn graph_for_book(ctx: &ReducerContext, book_id: u64) -> unlock::Graph {
                 .map(|b| unlock::BlockNode {
                     block_id: b.block_id,
                     is_optional: b.is_optional,
+                    prerequisites: ctx
+                        .db
+                        .block_deps()
+                        .block_id()
+                        .filter(b.block_id)
+                        .map(|d| d.depends_on_block_id)
+                        .collect(),
                 })
                 .collect(),
         })

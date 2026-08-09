@@ -18,6 +18,9 @@
  *    grade as an empty pass — `create_block` produces exactly that state.
  * 4. **A quiz inside a Blocked chapter.** Otherwise the graph is walkable one
  *    submission at a time, which is what `can_complete_block` was written to stop.
+ * 5. **A block whose own prerequisites are unmet** (M12), by either reducer. The
+ *    chapter gate and the block gate are separate checks in the same two
+ *    reducers, so deleting either one leaves the other passing all its tests.
  *
  * Every refusal here has a positive control with equally valid arguments, because
  * a call that fails for an unrelated reason — a bad id, a renamed field — looks
@@ -45,6 +48,11 @@ let conn: DbConnection;
 /** Ids of the fixture built in `beforeAll`. */
 let open: { chapterId: bigint; quizBlockId: bigint; readingBlockId: bigint; blankQuizId: bigint };
 let locked: { quizBlockId: bigint };
+/**
+ * Blocks in the *open* chapter that depend on a block nobody reads, so the only
+ * thing standing between the reader and them is the block gate (M12).
+ */
+let gatedByBlock: { readingBlockId: bigint; quizBlockId: bigint; prerequisiteId: bigint };
 
 function connect(): Promise<DbConnection> {
   return new Promise((resolve, reject) => {
@@ -223,8 +231,28 @@ test.beforeAll(async () => {
   };
   locked = { quizBlockId: await createBlock(lockedChapter, 'A quiz behind a wall', 'Quiz') };
 
+  // The block gate, inside the *open* chapter on purpose: the chapter is
+  // reachable and the reader can demonstrably complete blocks in it, so a refusal
+  // here can only be the block's own prerequisites.
+  const prerequisiteId = await createBlock(openChapter, 'The block that comes first', 'Reading');
+  gatedByBlock = {
+    prerequisiteId,
+    readingBlockId: await createBlock(openChapter, 'A reading behind a block', 'Reading'),
+    quizBlockId: await createBlock(openChapter, 'A quiz behind a block', 'Quiz'),
+  };
+  for (const blockId of [gatedByBlock.readingBlockId, gatedByBlock.quizBlockId]) {
+    await conn.reducers.setBlockDeps({ blockId, dependsOnBlockIds: [prerequisiteId] });
+  }
+  await waitFor(
+    () => ([...conn.db.blockDeps.iter()].filter((d) => d.dependsOnBlockId === prerequisiteId).length === 2
+      ? true
+      : undefined),
+    'the block prerequisite edges',
+  );
+
   await writeQuizInto(open.quizBlockId);
   await writeQuizInto(locked.quizBlockId);
+  await writeQuizInto(gatedByBlock.quizBlockId);
 });
 
 test.afterAll(() => {
@@ -362,6 +390,57 @@ test('a quiz block with no quiz configured cannot be submitted or completed', as
   const completeRefusal = await refusalFrom(conn.reducers.completeBlock({ blockId: open.blankQuizId }));
   expect(completeRefusal).toContain('quiz');
   expect(isComplete(open.blankQuizId)).toBe(false);
+});
+
+test('a block whose own prerequisites are unmet is refused by both reducers', async () => {
+  // M12: the chapter gate and the block gate are separate checks, and this
+  // chapter is demonstrably open — `complete_block still completes an ordinary
+  // reading block` used it. So the only thing refusing these is the block gate,
+  // and it has to be watched on both doors: `complete_block` and `submit_quiz`
+  // check it independently, so deleting either call leaves the other green.
+  const completeRefusal = await refusalFrom(
+    conn.reducers.completeBlock({ blockId: gatedByBlock.readingBlockId }),
+  );
+  expect(completeRefusal).toContain('depends on');
+  expect(isComplete(gatedByBlock.readingBlockId)).toBe(false);
+
+  // Fully correct answers, so nothing about the submission itself can be what
+  // rejected it.
+  const submitRefusal = await refusalFrom(
+    conn.reducers.submitQuiz({
+      blockId: gatedByBlock.quizBlockId,
+      answers: answersFor(gatedByBlock.quizBlockId, 'all'),
+    }),
+  );
+  expect(submitRefusal).toContain('depends on');
+  expect(attemptsOn(gatedByBlock.quizBlockId), 'a refused submission must not be recorded').toHaveLength(0);
+  expect(isComplete(gatedByBlock.quizBlockId)).toBe(false);
+});
+
+test('reading the prerequisite opens both of them', async () => {
+  // The positive control for the test above: the same two calls, with the same
+  // arguments, succeed once the prerequisite is done. Without this, both
+  // refusals could be failing for a reason that has nothing to do with the gate.
+  await conn.reducers.completeBlock({ blockId: gatedByBlock.prerequisiteId });
+  await waitFor(
+    () => (isComplete(gatedByBlock.prerequisiteId) ? true : undefined),
+    'the prerequisite block to complete',
+  );
+
+  await conn.reducers.completeBlock({ blockId: gatedByBlock.readingBlockId });
+  await waitFor(
+    () => (isComplete(gatedByBlock.readingBlockId) ? true : undefined),
+    'the formerly locked reading block to complete',
+  );
+
+  await conn.reducers.submitQuiz({
+    blockId: gatedByBlock.quizBlockId,
+    answers: answersFor(gatedByBlock.quizBlockId, 'all'),
+  });
+  await waitFor(
+    () => (isComplete(gatedByBlock.quizBlockId) ? true : undefined),
+    'the formerly locked quiz block to complete',
+  );
 });
 
 test('a quiz in a Blocked chapter cannot be submitted, right answers or not', async () => {

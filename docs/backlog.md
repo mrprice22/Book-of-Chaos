@@ -400,8 +400,23 @@ key never appears in the page source or in any subscription the client holds.
       directions. The unlock engine fails closed on a dangling edge, so a leftover
       prerequisite pointing at a block that no longer exists would lock its dependent
       forever with nothing on screen to explain why
-- [ ] **M12.2** `unlock::block_state(graph, progress, block_id)` pure function; both
-      `complete_block` and `submit_quiz` refuse a block with unmet prerequisites
+- [x] **M12.2** `unlock::block_state(graph, progress, block_id)` pure function; both
+      `complete_block` and `submit_quiz` refuse a block with unmet prerequisites.
+      Three states, not the chapter's four: a block has no "in progress" — it is
+      done or it is not, because completion is a single `reader_progress` row.
+      **`block_state` is deliberately silent about the chapter.** It answers the
+      block half only, and the reducers call `require_reachable_chapter` *and*
+      `require_unlocked_block`, which is what makes the milestone's "neither can
+      override the other" true by construction rather than by care. Folding the
+      chapter in would also have cost M12.3 the ability to say *which* of the two
+      locks a reader is looking at. Watched failing on each door separately:
+      dropping the check from `can_complete_block` and dropping it from
+      `submit_quiz` each turn the same live-client case red on a different
+      assertion, one per reducer, with the other ten cases green — which is the
+      point, since a single call site covering both would have hidden one deletion.
+      `Graph::block` searches book-wide, because a prerequisite may live in another
+      chapter; a dangling one fails closed even when the reader has "completed" the
+      missing id, which is the case a presence check alone would wave through
 - [ ] **M12.3** Client: prerequisite-locked blocks are visibly locked within an otherwise
       Available chapter, and their controls are not merely hidden
 - [ ] **M12.4** Table-driven tests including the degenerate shapes M3.4 established:
