@@ -36,60 +36,41 @@ didn't work" is not an entry.
 
 ## Open
 
-### M13.1 — the hosted SpacetimeDB target needs an account only you can create
-**Date:** 2026-08-08
-
-**Tried:** Everything that can be established without an account. The CLI in the dev
-container is `spacetime 2.8.0`, and `spacetime server list` already knows two servers:
-`maincloud` (`https://maincloud.spacetimedb.com`, the default) and `local`
-(`http://127.0.0.1:3000`). Publishing to Maincloud needs `spacetime login`, which is an
-interactive browser flow against a spacetimedb.com account — it cannot be completed from
-here, and the resulting token is a credential that must not be committed. No account was
-created and no signup form was filled in.
-
-The code is already configuration-driven, so nothing is waiting on a decision except the
-decision itself: `scripts/deploy.sh` reads `SPACETIME_DB_NAME`, and the client reads
-`VITE_SPACETIME_URI` and `VITE_SPACETIME_DB_NAME`. What is hardcoded is only the
-*local* default (`http://localhost:3000`), which M13.2 replaces with a target chosen by
-environment.
-
-**Blocker:** Two things, both yours:
-
-1. **An account, and possibly a payment method.** Maincloud's free tier terms and any
-   card requirement are not something to guess at from here.
-2. **A globally unique database name.** Maincloud names are platform-wide, so
-   `book-of-chaos` may well be taken. This is a naming decision with a public
-   consequence, not an implementation detail to default.
-
-**Options:**
-
-- **Maincloud (recommended).** `spacetime login`, then `spacetime publish -s maincloud
-  <name>`. No server to run, no TLS to terminate, no upgrades to track. The costs are a
-  dependency on a hosted service and whatever its terms are. It is the smallest thing
-  that satisfies Definition of Done item 6 — "someone who has never cloned this
-  repository can open a link" — which is the whole point of M13.
-- **Self-hosted.** A VPS running `spacetime start` behind a reverse proxy with a
-  certificate. Full control, and a real ongoing operational surface: this repository has
-  no runbook for patching a server, and writing one is a milestone rather than a task.
-- **Defer M13 and ship v0.2 as local-only.** Honest, but it drops items 6 of the v0.2
-  Definition of Done, and the release's one-sentence scope says "both of them are doing
-  this at a public URL rather than on one laptop".
-
-Note that the *client* still needs somewhere to be served from — M13.3. That is a
-separate provider (any static host) and a separate account, and it is worth deciding
-both at once rather than discovering the second one here in a week.
-
-**Needs:** From you, one of:
-
-- "Maincloud, the database is called `<name>`" — plus a logged-in CLI. The login has to
-  happen in your terminal; in this session, `! ./scripts/dev.sh run 'spacetime login'`
-  runs it in the dev container so the token lands in `.devhome/` (which is gitignored)
-  rather than on the host.
-- "Self-host, here is the host and how to reach it."
-- "Defer M13" — in which case M12 is the end of the autopilot's queue and v0.2 ships
-  without item 6.
+_Nothing is blocked._
 
 ## Resolved
+
+### M13.1 — "the hosted SpacetimeDB target needs an account only you can create" (opened 2026-08-08)
+**Resolved:** 2026-08-08, by the account being created and the CLI being logged in.
+
+**Maincloud**, database name **`book-of-chaos-83i7y`** — the suffix exists because
+Maincloud names are platform-wide and the bare `book-of-chaos` was not available to us.
+Verified from the dev container rather than taken on trust:
+
+- `spacetime login show` → logged in as identity `c2009cd4922e…`
+- `spacetime list` → `book-of-chaos-83i7y`, owner identity `c2006a7f4c69…`
+- The token landed in `.devhome/`, which `.gitignore:2` covers. Nothing to commit.
+
+**Logging in breaks the local database, and this is not hypothetical — it happened here.**
+`spacetime login` switches the CLI to the web identity for *every* server, `local`
+included. The existing local `book-of-chaos` was owned by the previous anonymous
+identity, so immediately after login every local publish failed:
+
+    403 Forbidden: c2009cd4922e… is not authorized to perform action
+    on database c20021bc8152…: update database
+
+`deploy.sh local --clear` does **not** rescue this. `--delete-data=always` needs
+`reset database`, which fails the same ownership check — so the escape hatch is locked
+behind the thing it is meant to escape. The fix is to move `.devhome/spacetime-data`
+aside and republish; the local database is disposable scratch and `npm run seed` refills
+it. The orphaned dir was preserved rather than deleted.
+
+Expect this once per machine, on the first login. It is the same failure shape that cost
+two sessions before, and the reason `deploy.sh` keeps its data dir out of `$HOME`.
+
+Still undecided, and deliberately not treated as blocking: **where the client is served
+from** (M13.3). That is a separate provider and a separate account. It is a decision, not
+an obstacle — M13.2 only needs the module target, which now exists.
 
 ### M8.4 — "one push needed to confirm the CI fix" (opened 2026-08-07)
 **Resolved:** 2026-08-07, by the push and the run that followed it.
