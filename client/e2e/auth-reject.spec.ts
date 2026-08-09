@@ -44,6 +44,8 @@ let own: {
   chapterId: bigint;
   laterChapterId: bigint;
   blockId: bigint;
+  /** In `laterChapterId`, so `set_block_deps` can be seen drawing a cross-chapter edge. */
+  laterBlockId: bigint;
   quizBlockId: bigint;
 };
 
@@ -178,6 +180,7 @@ test.beforeAll(async () => {
     chapterId,
     laterChapterId,
     blockId: await createBlockIn(chapterId, 'Control block'),
+    laterBlockId: await createBlockIn(laterChapterId, 'Control block in another chapter'),
     // `set_quiz` refuses a block that is not a Quiz, so its positive control
     // needs one of the right type — otherwise the "allowed" half would fail on
     // the block type and prove nothing about ownership.
@@ -288,6 +291,26 @@ test('set_chapter_deps is refused for a non-owner', async () => {
       chapterId: foreign.chapterId,
       dependsOnChapterIds: [],
     }),
+  );
+  expect(refusal).toContain(REFUSAL);
+});
+
+test('set_block_deps is refused for a non-owner', async () => {
+  // The eleventh owner-gated reducer. The positive control is doing double duty:
+  // `own.laterBlockId` sits in a *different chapter* of the same book, so a call
+  // that succeeds also demonstrates the cross-chapter edge the v0.2 scope
+  // promises — the one thing about `set_block_deps` that no unit test can see,
+  // because the pure rule is handed a candidate set and never learns where the
+  // ids came from.
+  await conn.reducers.setBlockDeps({
+    blockId: own.laterBlockId,
+    dependsOnBlockIds: [own.blockId],
+  });
+
+  // An empty prerequisite set is always valid — no missing block, no cycle — so
+  // ownership is the only thing left that can reject it.
+  const refusal = await refusalFrom(
+    conn.reducers.setBlockDeps({ blockId: foreign.blockId, dependsOnBlockIds: [] }),
   );
   expect(refusal).toContain(REFUSAL);
 });

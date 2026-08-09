@@ -10,6 +10,13 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const BlockDep = __t.object("BlockDep", {
+  depId: __t.u64(),
+  blockId: __t.u64(),
+  dependsOnBlockId: __t.u64(),
+});
+export type BlockDep = __Infer<typeof BlockDep>;
+
 // The tagged union or sum type for the algebraic type `BlockType`.
 export const BlockType = __t.enum("BlockType", {
   Reading: __t.unit(),

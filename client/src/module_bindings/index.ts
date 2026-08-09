@@ -42,6 +42,7 @@ import CreateChapterReducer from "./create_chapter_reducer";
 import DeleteBlockReducer from "./delete_block_reducer";
 import PublishBookReducer from "./publish_book_reducer";
 import ReorderChaptersReducer from "./reorder_chapters_reducer";
+import SetBlockDepsReducer from "./set_block_deps_reducer";
 import SetChapterDepsReducer from "./set_chapter_deps_reducer";
 import SetQuizReducer from "./set_quiz_reducer";
 import SubmitQuizReducer from "./submit_quiz_reducer";
@@ -52,6 +53,7 @@ import UpdateChapterReducer from "./update_chapter_reducer";
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import BlockDepsRow from "./block_deps_table";
 import BooksRow from "./books_table";
 import ChapterDepsRow from "./chapter_deps_table";
 import ChaptersRow from "./chapters_table";
@@ -68,6 +70,23 @@ import UsersRow from "./users_table";
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
+  blockDeps: __table({
+    name: 'block_deps',
+    indexes: [
+      { accessor: 'block_id', name: 'block_deps_block_id_idx_btree', algorithm: 'btree', columns: [
+        'blockId',
+      ] },
+      { accessor: 'dep_id', name: 'block_deps_dep_id_idx_btree', algorithm: 'btree', columns: [
+        'depId',
+      ] },
+      { accessor: 'depends_on_block_id', name: 'block_deps_depends_on_block_id_idx_btree', algorithm: 'btree', columns: [
+        'dependsOnBlockId',
+      ] },
+    ],
+    constraints: [
+      { name: 'block_deps_dep_id_key', constraint: 'unique', columns: ['depId'] },
+    ],
+  }, BlockDepsRow),
   books: __table({
     name: 'books',
     indexes: [
@@ -244,6 +263,7 @@ const reducersSchema = __reducers(
   __reducerSchema("delete_block", DeleteBlockReducer),
   __reducerSchema("publish_book", PublishBookReducer),
   __reducerSchema("reorder_chapters", ReorderChaptersReducer),
+  __reducerSchema("set_block_deps", SetBlockDepsReducer),
   __reducerSchema("set_chapter_deps", SetChapterDepsReducer),
   __reducerSchema("set_quiz", SetQuizReducer),
   __reducerSchema("submit_quiz", SubmitQuizReducer),
@@ -258,6 +278,8 @@ const proceduresSchema = __procedures(
 
 type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "tables"> & {
   tables: typeof tablesSchema.schemaType.tables & {
+    /** @deprecated Use `blockDeps` instead. This alias will be removed in the next major version. */
+    readonly "block_deps": Omit<typeof tablesSchema.schemaType.tables["blockDeps"], "accessorName"> & { readonly accessorName: "block_deps" };
     /** @deprecated Use `chapterDeps` instead. This alias will be removed in the next major version. */
     readonly "chapter_deps": Omit<typeof tablesSchema.schemaType.tables["chapterDeps"], "accessorName"> & { readonly accessorName: "chapter_deps" };
     /** @deprecated Use `knowledgeBlocks` instead. This alias will be removed in the next major version. */
@@ -292,6 +314,7 @@ const REMOTE_MODULE = {
 >;
 
 const tableAccessorAliases = {
+  "block_deps": "blockDeps",
   "chapter_deps": "chapterDeps",
   "knowledge_blocks": "knowledgeBlocks",
   "quiz_attempt_results": "quizAttemptResults",
@@ -320,6 +343,8 @@ function __withTableAccessorAliases<T extends object>(target: T, freeze = false)
 
 type __DbViewBase = __DbConnectionImpl<typeof REMOTE_MODULE>["db"];
 export type DbView = __DbViewBase & {
+  /** @deprecated Use `blockDeps` instead. This alias will be removed in the next major version. */
+  readonly "block_deps": __DbViewBase["blockDeps"];
   /** @deprecated Use `chapterDeps` instead. This alias will be removed in the next major version. */
   readonly "chapter_deps": __DbViewBase["chapterDeps"];
   /** @deprecated Use `knowledgeBlocks` instead. This alias will be removed in the next major version. */
@@ -340,6 +365,8 @@ export type DbView = __DbViewBase & {
 
 type __TablesBase = __QueryBuilder<typeof tablesSchema.schemaType>;
 export type Tables = __TablesBase & {
+  /** @deprecated Use `blockDeps` instead. This alias will be removed in the next major version. */
+  readonly "block_deps": __TablesBase["blockDeps"];
   /** @deprecated Use `chapterDeps` instead. This alias will be removed in the next major version. */
   readonly "chapter_deps": __TablesBase["chapterDeps"];
   /** @deprecated Use `knowledgeBlocks` instead. This alias will be removed in the next major version. */

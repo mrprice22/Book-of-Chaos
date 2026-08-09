@@ -428,6 +428,61 @@ pub fn validate_chapter_deps(
 }
 
 // ---------------------------------------------------------------------------
+// Block dependencies
+// ---------------------------------------------------------------------------
+
+/// Validates a proposed prerequisite set for one block.
+///
+/// The block-level twin of [`validate_chapter_deps`], down to the order of the
+/// checks, because the two are the same rule at two scales and an author who has
+/// learned one should not have to learn the other.
+///
+/// The one difference is `book_block_ids`: a chapter's prerequisites must be
+/// chapters of the same book, and a block's must be *blocks* of the same book —
+/// which the v0.2 scope says explicitly may live in another chapter. So the
+/// candidate set is gathered across the whole book, and anything outside it is
+/// refused.
+///
+/// A block id that does not exist and one that belongs to somebody else's book
+/// get the same message, deliberately. Distinguishing them would turn this
+/// reducer into an oracle for which block ids exist on the platform, which is the
+/// same reason `find_book` reports "no longer exists" to a non-owner.
+///
+/// `other_edges` must be every block edge in the book *except* the ones belonging
+/// to `block_id`, since those are being replaced — the cycle search runs against
+/// the graph as it would be after the write.
+pub fn validate_block_deps(
+    block_id: u64,
+    requested: &[u64],
+    book_block_ids: &[u64],
+    other_edges: &[DepEdge],
+) -> Result<(), String> {
+    let mut seen: Vec<u64> = Vec::with_capacity(requested.len());
+    for prereq in requested {
+        if *prereq == block_id {
+            return Err("A block cannot depend on itself.".to_string());
+        }
+        if !book_block_ids.contains(prereq) {
+            return Err("A prerequisite must be another block in the same book.".to_string());
+        }
+        if seen.contains(prereq) {
+            return Err("That block is listed as a prerequisite twice.".to_string());
+        }
+        seen.push(*prereq);
+    }
+
+    let mut edges: Vec<DepEdge> = other_edges.to_vec();
+    edges.extend(requested.iter().map(|prereq| (block_id, *prereq)));
+    if find_cycle(&edges).is_some() {
+        return Err(
+            "That would create a loop: these blocks would each be waiting on the other."
+                .to_string(),
+        );
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Reading
 // ---------------------------------------------------------------------------
 
@@ -925,6 +980,71 @@ mod tests {
         // in `other_edges` and must not make (1 -> 2) look like a cycle.
         assert!(validate_chapter_deps(2, &[], &[1, 2], &[]).is_ok());
         assert!(validate_chapter_deps(1, &[2], &[1, 2], &[]).is_ok());
+    }
+
+    // --- block dependencies --------------------------------------------------
+    //
+    // The same seven properties as the chapter rules above, at block scale. They
+    // are spelled out again rather than shared through a helper: the two rules
+    // are separate trust boundaries, and a test that exercises whichever one it
+    // is handed would keep passing if `set_block_deps` started calling
+    // `validate_chapter_deps` by mistake.
+
+    #[test]
+    fn accepts_reasonable_block_prerequisites() {
+        assert!(validate_block_deps(3, &[1, 2], &[1, 2, 3], &[]).is_ok());
+        // Clearing a block's prerequisites is always allowed.
+        assert!(validate_block_deps(3, &[], &[1, 2, 3], &[(2, 1)]).is_ok());
+    }
+
+    #[test]
+    fn rejects_a_self_dependent_block() {
+        let err = validate_block_deps(3, &[3], &[1, 2, 3], &[]).unwrap_err();
+        assert!(err.contains("itself"), "unhelpful message: {err}");
+    }
+
+    #[test]
+    fn rejects_a_missing_or_cross_book_block() {
+        // Both faults share one message on purpose — see `validate_block_deps`.
+        // `book_block_ids` is the whole book's blocks, so "not in it" covers a
+        // deleted block and a block in someone else's book alike.
+        let err = validate_block_deps(3, &[99], &[1, 2, 3], &[]).unwrap_err();
+        assert!(err.contains("same book"), "unhelpful message: {err}");
+    }
+
+    #[test]
+    fn rejects_duplicate_block_prerequisites() {
+        let err = validate_block_deps(3, &[1, 1], &[1, 2, 3], &[]).unwrap_err();
+        assert!(err.contains("twice"), "unhelpful message: {err}");
+    }
+
+    #[test]
+    fn rejects_a_block_cycle_the_write_would_close() {
+        // 1 already depends on 2; making 2 depend on 1 closes the loop.
+        let err = validate_block_deps(2, &[1], &[1, 2], &[(1, 2)]).unwrap_err();
+        assert!(err.contains("loop"), "unhelpful message: {err}");
+    }
+
+    #[test]
+    fn rejects_a_longer_block_cycle_the_write_would_close() {
+        let err = validate_block_deps(3, &[1], &[1, 2, 3], &[(1, 2), (2, 3)]).unwrap_err();
+        assert!(err.contains("loop"), "unhelpful message: {err}");
+    }
+
+    #[test]
+    fn a_diamond_of_blocks_is_not_a_cycle() {
+        // 4 waits on 2 and 3, both of which wait on 1. A block reachable by two
+        // paths is the shape a careless traversal calls a loop, and rejecting it
+        // would forbid the most ordinary structure an author draws.
+        assert!(validate_block_deps(4, &[2, 3], &[1, 2, 3, 4], &[(2, 1), (3, 1)]).is_ok());
+    }
+
+    #[test]
+    fn replacing_block_deps_ignores_the_blocks_own_old_edges() {
+        // Block 2's current edge (2 -> 1) is being replaced, so it must not be in
+        // `other_edges` and must not make (1 -> 2) look like a cycle.
+        assert!(validate_block_deps(2, &[], &[1, 2], &[]).is_ok());
+        assert!(validate_block_deps(1, &[2], &[1, 2], &[]).is_ok());
     }
 
     // --- reading -------------------------------------------------------------

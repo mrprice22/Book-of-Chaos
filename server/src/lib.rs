@@ -130,6 +130,27 @@ pub struct ChapterDep {
     pub depends_on_chapter_id: u64,
 }
 
+/// One row per edge: `block_id` requires `depends_on_block_id` to be complete.
+///
+/// The block-level twin of `ChapterDep`, and deliberately the same shape — the
+/// same cycle search runs over both, so an edge is an edge. The difference is
+/// scope: a chapter's prerequisites must be siblings in the same *chapter list*,
+/// while a block's may sit in any chapter of the same book. That is the v0.2
+/// scope's wording — "within its chapter or across chapters" — and it is why
+/// `set_block_deps` gathers candidates book-wide rather than chapter-wide.
+#[spacetimedb::table(accessor = block_deps, public)]
+pub struct BlockDep {
+    #[primary_key]
+    #[auto_inc]
+    pub dep_id: u64,
+    /// The dependent block — the one that stays locked.
+    #[index(btree)]
+    pub block_id: u64,
+    /// The prerequisite block.
+    #[index(btree)]
+    pub depends_on_block_id: u64,
+}
+
 /// One row per (reader, completed block). Absence means "not complete", so
 /// `complete_block` is naturally idempotent (M3.3).
 #[spacetimedb::table(accessor = reader_progress, public)]
@@ -719,6 +740,22 @@ pub fn delete_block(ctx: &ReducerContext, block_id: u64) -> Result<(), String> {
     clear_quiz(ctx, block_id);
     ctx.db.knowledge_blocks().block_id().delete(block_id);
 
+    // Edges in both directions, or a deleted block leaves a prerequisite nothing
+    // can ever satisfy. The unlock engine fails closed on a dangling edge — see
+    // `unlock::chapter_state` — so leaving these behind would silently lock a
+    // block forever, with nothing on screen to explain why.
+    let dep_ids: Vec<u64> = ctx
+        .db
+        .block_deps()
+        .block_id()
+        .filter(block_id)
+        .chain(ctx.db.block_deps().depends_on_block_id().filter(block_id))
+        .map(|d| d.dep_id)
+        .collect();
+    for dep_id in dep_ids {
+        ctx.db.block_deps().dep_id().delete(dep_id);
+    }
+
     for progress in ctx.db.reader_progress().block_id().filter(block_id) {
         ctx.db
             .reader_progress()
@@ -765,6 +802,91 @@ pub fn delete_block(ctx: &ReducerContext, block_id: u64) -> Result<(), String> {
         });
     }
     Ok(())
+}
+
+/// Replace a block's prerequisites with `depends_on_block_ids`.
+///
+/// Wholesale replacement, owner-gated, cycle-checked at write time — the same
+/// three decisions `set_chapter_deps` makes, for the same reasons. The eleventh
+/// owner-gated reducer, and covered by `auth-reject` like the other ten.
+///
+/// Candidates are the book's blocks rather than the chapter's: the v0.2 scope
+/// allows a block to depend on a block in another chapter, so a chapter-scoped
+/// candidate set would refuse something the release promises. Cross-*book* edges
+/// stay refused — a book has to be a self-contained graph.
+#[spacetimedb::reducer]
+pub fn set_block_deps(
+    ctx: &ReducerContext,
+    block_id: u64,
+    depends_on_block_ids: Vec<u64>,
+) -> Result<(), String> {
+    let block = find_block(ctx, block_id)?;
+    let chapter = find_chapter(ctx, block.chapter_id)?;
+    let book = find_book(ctx, chapter.book_id)?;
+    rules::require_owner(book.owner == ctx.sender())?;
+
+    let book_block_ids = block_ids_in_book(ctx, chapter.book_id);
+
+    // Every block edge in the book except this block's own, which are being
+    // replaced. Scoped to the book so the cycle search stays proportional to the
+    // book rather than to the whole platform.
+    let other_edges: Vec<rules::DepEdge> = book_block_ids
+        .iter()
+        .filter(|id| **id != block_id)
+        .flat_map(|id| {
+            ctx.db
+                .block_deps()
+                .block_id()
+                .filter(*id)
+                .map(|d| (d.block_id, d.depends_on_block_id))
+        })
+        .collect();
+
+    rules::validate_block_deps(
+        block_id,
+        &depends_on_block_ids,
+        &book_block_ids,
+        &other_edges,
+    )?;
+
+    // Validation passed, so the replacement below cannot leave a partial graph.
+    let stale: Vec<u64> = ctx
+        .db
+        .block_deps()
+        .block_id()
+        .filter(block_id)
+        .map(|d| d.dep_id)
+        .collect();
+    for dep_id in stale {
+        ctx.db.block_deps().dep_id().delete(dep_id);
+    }
+    for depends_on_block_id in depends_on_block_ids {
+        ctx.db.block_deps().insert(BlockDep {
+            dep_id: 0, // assigned by #[auto_inc]
+            block_id,
+            depends_on_block_id,
+        });
+    }
+    Ok(())
+}
+
+/// Every block in a book, across all its chapters.
+///
+/// Block prerequisites may cross chapters but not books, so this is exactly the
+/// candidate set `set_block_deps` validates against.
+fn block_ids_in_book(ctx: &ReducerContext, book_id: u64) -> Vec<u64> {
+    ctx.db
+        .chapters()
+        .book_id()
+        .filter(book_id)
+        .flat_map(|c| {
+            ctx.db
+                .knowledge_blocks()
+                .chapter_id()
+                .filter(c.chapter_id)
+                .map(|b| b.block_id)
+        })
+        .collect()
 }
 
 fn find_block(ctx: &ReducerContext, block_id: u64) -> Result<KnowledgeBlock, String> {

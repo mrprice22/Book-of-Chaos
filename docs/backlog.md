@@ -377,8 +377,29 @@ key never appears in the page source or in any subscription the client holds.
 
 ## M12 — Block prerequisites
 
-- [ ] **M12.1** `block_deps` table + `set_block_deps` reducer — rejects self-reference,
-      missing blocks, cross-book references, and cycles, reusing `unlock::find_cycle`
+- [x] **M12.1** `block_deps` table + `set_block_deps` reducer — rejects self-reference,
+      missing blocks, cross-book references, and cycles, reusing `unlock::find_cycle`.
+      `validate_block_deps` is the block-scale twin of `validate_chapter_deps`, check
+      for check, and its tests are spelled out again rather than shared through a
+      helper — the two are separate trust boundaries, and a test handed whichever
+      rule it is given would keep passing if `set_block_deps` started calling the
+      chapter one by mistake. **Missing and cross-book get the same message**, on
+      purpose: the candidate set is the book's blocks, so "not in it" covers a
+      deleted block and another author's block alike, and distinguishing them would
+      make the reducer an oracle for which block ids exist on the platform — the
+      same reason `find_book` says "no longer exists" to a non-owner.
+      Candidates are gathered **book-wide, not chapter-wide**, because
+      [v0.2-scope.md](./v0.2-scope.md#in-scope) allows a prerequisite in another
+      chapter; that is the one property no unit test can see, since the pure rule is
+      handed a candidate set and never learns where the ids came from, so the
+      positive control in `auth-reject` draws a real cross-chapter edge.
+      `set_block_deps` is the **eleventh** owner-gated reducer and `auth-reject`
+      covers it — watched failing before being trusted: forcing the owner check true
+      turns exactly that one case red and leaves the other ten green.
+      Also folded in: `delete_block` now deletes the deleted block's edges in **both**
+      directions. The unlock engine fails closed on a dangling edge, so a leftover
+      prerequisite pointing at a block that no longer exists would lock its dependent
+      forever with nothing on screen to explain why
 - [ ] **M12.2** `unlock::block_state(graph, progress, block_id)` pure function; both
       `complete_block` and `submit_quiz` refuse a block with unmet prerequisites
 - [ ] **M12.3** Client: prerequisite-locked blocks are visibly locked within an otherwise
