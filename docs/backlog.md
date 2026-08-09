@@ -463,9 +463,11 @@ inventing infrastructure.
       2026-08-08**: Maincloud, database `book-of-chaos-83i7y`
 - [x] **M13.2** `scripts/deploy.sh remote` publishes the module to that target; host and
       module name come from environment configuration, never a hardcoded `localhost`
-- [~] **M13.3** Client static build deployed and reachable at a public URL — Cloudflare
-      Workers, `book-of-chaos.com`. Config committed (`client/wrangler.jsonc`,
-      `client/.env.production`); **completes on the next push**, when Cloudflare rebuilds
+- [x] **M13.3** Client static build deployed and reachable at a public URL — Cloudflare
+      Workers at `book-of-chaos.com`, module on Maincloud. Verified 2026-08-08: the
+      served `index.html` points at the hashed bundle, `/chapter/7` returns the app
+      rather than a 404, and source paths fall through to the SPA shell instead of
+      serving `vite.config.ts`
 - [ ] **M13.4** ~~CI deploys on tag push~~ **Amended 2026-08-08: deploys on push to
       `main`.** Cloudflare's GitHub integration builds on branch pushes and has no
       tag trigger, so tag-gating meant dropping that integration for a GitHub Actions

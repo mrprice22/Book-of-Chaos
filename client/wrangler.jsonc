@@ -9,6 +9,24 @@
   // `name` must match the Worker that already exists, or a deploy creates a *second*
   // Worker on a different subdomain and the custom domain keeps pointing at the old
   // one. This is the name in book-of-chaos.jamesprice-slightlyepic.workers.dev.
+  // This file is necessary but NOT sufficient. Two Cloudflare dashboard settings have
+  // to agree with it, and when they do not, the failure is silent and looks like
+  // nothing deployed:
+  //
+  //   Root directory: client        (no leading slash)
+  //   Build command:  npm run build
+  //
+  // With the root directory pointing anywhere else, Cloudflare finds no package.json,
+  // so it installs nothing and runs no build — and `npx wrangler deploy` then runs
+  // somewhere this file is not. Finding no config, wrangler runs its setup wizard,
+  // auto-answers "yes" in a non-interactive build, writes its own wrangler.jsonc with
+  // `directory: client`, and uploads the source tree. The deploy *succeeds*. The site
+  // serves index.html pointing at /src/main.tsx, so you get the right page title and a
+  // blank body, and the build log says "Success".
+  //
+  // The tell in the log is the file count: a handful of files read from
+  // .../client/dist is correct; "Read 117 files from .../client" is the wizard, and
+  // any "Create wrangler.jsonc" block means this file was never found.
   "name": "book-of-chaos",
   "compatibility_date": "2026-08-08",
   "assets": {
