@@ -431,8 +431,20 @@ key never appears in the page source or in any subscription the client holds.
       `blockDeps` alongside the other tables for the same reason: a block whose edges
       have not arrived yet would render unlocked, which is the one direction this
       must not fail in
-- [ ] **M12.4** Table-driven tests including the degenerate shapes M3.4 established:
-      chain, diamond, self-cycle, multi-node cycle, cross-chapter edge, empty set
+- [x] **M12.4** Table-driven tests including the degenerate shapes M3.4 established:
+      chain, diamond, self-cycle, multi-node cycle, cross-chapter edge, empty set.
+      Thirteen shapes in one table, **read three times** for three properties that
+      can disagree: `block_state`'s answer for every block in the shape, `find_cycle`
+      finding a loop in exactly the two cyclic ones, and `validate_block_deps`
+      accepting or refusing each shape as the author drawing its *last* edge with the
+      rest already stored — which is the only way a cycle is ever actually closed,
+      and the only one of the three readings that is the trust boundary. Two shapes
+      beyond the listed six earn their place: a dangling prerequisite the reader has
+      "completed", and a satisfied cross-chapter edge. Watched failing twice —
+      dropping the existence half of the prerequisite check turns exactly the
+      dangling shape red, and `all` → `any` turns seven shapes red by name, including
+      the diamond's join and the empty-set cases that `all()` over nothing makes
+      vacuously true
 
 **Acceptance:** block-level and chapter-level gating compose without either one being able
 to override the other, and the rejection paths are tested, not assumed.

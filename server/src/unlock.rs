@@ -929,4 +929,273 @@ mod tests {
         }
         assert!(failures.is_empty(), "\n{}", failures.join("\n"));
     }
+
+    // --- block graph shapes, table-driven ------------------------------------
+    //
+    // The same treatment M3.4 gave chapters, for block prerequisites: the shapes
+    // that break traversals, each asserting the state of *every* block rather
+    // than the interesting one, because the common failure is a block that
+    // changes state when nothing about it did.
+    //
+    // The table is read three times, for three properties that can disagree:
+    //
+    //   1. `block_state` answers as expected — including for the cyclic shapes,
+    //      which it must answer safely even though the write path refuses them.
+    //   2. `find_cycle` finds a cycle in exactly the cyclic shapes. A traversal
+    //      that called a diamond a loop would make the author's rejection a lie.
+    //   3. `validate_block_deps` accepts every acyclic shape and refuses every
+    //      cyclic one, drawing the last edge — which is what an author actually
+    //      does, and the only one of the three that is the trust boundary.
+    //
+    // Blocks are numbered `chapter * 100 + n` by the `block` helper, so a
+    // cross-chapter edge is visible in the case as written.
+
+    struct BlockCase {
+        shape: &'static str,
+        /// `(chapter_id, block ids in it)`.
+        chapters: &'static [(ChapterId, &'static [BlockId])],
+        /// `(block, prerequisite)`.
+        edges: &'static [(BlockId, BlockId)],
+        completed: &'static [BlockId],
+        expect: &'static [(BlockId, BlockState)],
+    }
+
+    fn block_cases() -> Vec<BlockCase> {
+        use BlockState::{Available, Complete, Locked};
+        vec![
+            BlockCase {
+                shape: "empty graph",
+                chapters: &[],
+                edges: &[],
+                completed: &[],
+                expect: &[(100, Locked)],
+            },
+            BlockCase {
+                shape: "empty prerequisite set",
+                chapters: &[(1, &[100, 101])],
+                edges: &[],
+                completed: &[],
+                // No edges at all: nothing is waiting on anything.
+                expect: &[(100, Available), (101, Available)],
+            },
+            BlockCase {
+                shape: "chain, untouched",
+                chapters: &[(1, &[100, 101, 102])],
+                edges: &[(101, 100), (102, 101)],
+                completed: &[],
+                expect: &[(100, Available), (101, Locked), (102, Locked)],
+            },
+            BlockCase {
+                shape: "chain, first done",
+                chapters: &[(1, &[100, 101, 102])],
+                edges: &[(101, 100), (102, 101)],
+                completed: &[100],
+                // One step at a time: finishing the first does not skip the second.
+                expect: &[(100, Complete), (101, Available), (102, Locked)],
+            },
+            BlockCase {
+                shape: "chain, finished",
+                chapters: &[(1, &[100, 101, 102])],
+                edges: &[(101, 100), (102, 101)],
+                completed: &[100, 101, 102],
+                expect: &[(100, Complete), (101, Complete), (102, Complete)],
+            },
+            BlockCase {
+                shape: "diamond, one arm done",
+                chapters: &[(1, &[100, 101, 102, 103])],
+                edges: &[(101, 100), (102, 100), (103, 101), (103, 102)],
+                completed: &[100, 101],
+                // The join waits for both arms, and the block reachable by two
+                // paths is not confused by being visited twice.
+                expect: &[
+                    (100, Complete),
+                    (101, Complete),
+                    (102, Available),
+                    (103, Locked),
+                ],
+            },
+            BlockCase {
+                shape: "diamond, both arms done",
+                chapters: &[(1, &[100, 101, 102, 103])],
+                edges: &[(101, 100), (102, 100), (103, 101), (103, 102)],
+                completed: &[100, 101, 102],
+                expect: &[
+                    (100, Complete),
+                    (101, Complete),
+                    (102, Complete),
+                    (103, Available),
+                ],
+            },
+            BlockCase {
+                shape: "cross-chapter edge",
+                chapters: &[(1, &[100]), (2, &[200])],
+                edges: &[(200, 100)],
+                completed: &[],
+                // The edge the graph has to be built book-wide to see at all.
+                expect: &[(100, Available), (200, Locked)],
+            },
+            BlockCase {
+                shape: "cross-chapter edge, satisfied",
+                chapters: &[(1, &[100]), (2, &[200])],
+                edges: &[(200, 100)],
+                completed: &[100],
+                expect: &[(100, Complete), (200, Available)],
+            },
+            BlockCase {
+                shape: "disconnected islands",
+                chapters: &[(1, &[100, 101]), (2, &[200, 201])],
+                edges: &[(101, 100), (201, 200)],
+                completed: &[100],
+                // Progress on one island must not move the other.
+                expect: &[
+                    (100, Complete),
+                    (101, Available),
+                    (200, Available),
+                    (201, Locked),
+                ],
+            },
+            BlockCase {
+                shape: "dangling prerequisite",
+                chapters: &[(1, &[100])],
+                edges: &[(100, 999)],
+                completed: &[999],
+                // Fails closed even though the reader has "completed" the missing
+                // id — the case a presence check alone would wave through.
+                expect: &[(100, Locked)],
+            },
+            BlockCase {
+                shape: "self-cycle",
+                chapters: &[(1, &[100, 101])],
+                edges: &[(100, 100)],
+                completed: &[],
+                // Refused at write time, and unreachable if it ever got in.
+                expect: &[(100, Locked), (101, Available)],
+            },
+            BlockCase {
+                shape: "three-node cycle",
+                chapters: &[(1, &[100, 101, 102])],
+                edges: &[(100, 102), (101, 100), (102, 101)],
+                completed: &[],
+                // Every block on a loop is unreachable, and the engine says so
+                // instead of recursing forever.
+                expect: &[(100, Locked), (101, Locked), (102, Locked)],
+            },
+        ]
+    }
+
+    /// The cyclic shapes, by name. Everything else in the table is acyclic.
+    const CYCLIC_BLOCK_SHAPES: [&str; 2] = ["self-cycle", "three-node cycle"];
+
+    fn graph_of(case: &BlockCase) -> Graph {
+        Graph::new(
+            case.chapters
+                .iter()
+                .map(|(chapter_id, block_ids)| ChapterNode {
+                    chapter_id: *chapter_id,
+                    is_optional: false,
+                    is_pinned: false,
+                    prerequisites: Vec::new(),
+                    blocks: block_ids
+                        .iter()
+                        .map(|block_id| BlockNode {
+                            block_id: *block_id,
+                            is_optional: false,
+                            prerequisites: case
+                                .edges
+                                .iter()
+                                .filter(|(from, _)| from == block_id)
+                                .map(|(_, to)| *to)
+                                .collect(),
+                        })
+                        .collect(),
+                })
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn every_block_graph_shape_yields_the_expected_states() {
+        let mut failures: Vec<String> = Vec::new();
+        for case in block_cases() {
+            let graph = graph_of(&case);
+            let progress = Progress::from_completed_blocks(case.completed.iter().copied());
+            for (block_id, expected) in case.expect {
+                let actual = block_state(&graph, &progress, *block_id);
+                if actual != *expected {
+                    failures.push(format!(
+                        "{}: block {block_id} is {actual:?}, expected {expected:?}",
+                        case.shape
+                    ));
+                }
+            }
+        }
+        assert!(failures.is_empty(), "\n{}", failures.join("\n"));
+    }
+
+    #[test]
+    fn every_block_graph_shape_agrees_with_find_cycle() {
+        let mut failures: Vec<String> = Vec::new();
+        for case in block_cases() {
+            let expected = CYCLIC_BLOCK_SHAPES.contains(&case.shape);
+            let found = find_cycle(case.edges);
+            if found.is_some() != expected {
+                failures.push(format!("{}: find_cycle returned {found:?}", case.shape));
+            }
+        }
+        assert!(failures.is_empty(), "\n{}", failures.join("\n"));
+    }
+
+    #[test]
+    fn every_block_graph_shape_is_accepted_or_refused_at_write_time() {
+        // The trust boundary's reading of the same table. Each case is replayed
+        // as the author drawing its *last* edge, with every earlier edge already
+        // in the database — which is the only way a cycle is ever closed.
+        //
+        // The dangling-prerequisite shape is excluded rather than expected to
+        // fail: `validate_block_deps` refuses it (999 is not in the book), and
+        // that is already tested by name. Here it would be a second thing the
+        // case is asserting, and a table that tests two properties at once is a
+        // table whose failures do not name their cause.
+        let mut failures: Vec<String> = Vec::new();
+        for case in block_cases() {
+            let Some((last, earlier)) = case.edges.split_last() else {
+                continue; // No edge to draw.
+            };
+            if case.shape == "dangling prerequisite" {
+                continue;
+            }
+            let (block_id, prerequisite) = *last;
+            let book_block_ids: Vec<BlockId> = case
+                .chapters
+                .iter()
+                .flat_map(|(_, block_ids)| block_ids.iter().copied())
+                .collect();
+            let requested: Vec<BlockId> = earlier
+                .iter()
+                .filter(|(from, _)| *from == block_id)
+                .map(|(_, to)| *to)
+                .chain(std::iter::once(prerequisite))
+                .collect();
+            let other_edges: Vec<DepEdge> = earlier
+                .iter()
+                .filter(|(from, _)| *from != block_id)
+                .copied()
+                .collect();
+
+            let result = crate::rules::validate_block_deps(
+                block_id,
+                &requested,
+                &book_block_ids,
+                &other_edges,
+            );
+            let refused = result.is_err();
+            if refused != CYCLIC_BLOCK_SHAPES.contains(&case.shape) {
+                failures.push(format!(
+                    "{}: validate_block_deps said {result:?}",
+                    case.shape
+                ));
+            }
+        }
+        assert!(failures.is_empty(), "\n{}", failures.join("\n"));
+    }
 }
