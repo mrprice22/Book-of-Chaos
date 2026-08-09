@@ -5,18 +5,39 @@
 #   ./scripts/deploy.sh local --no-seed  skip the demo book
 #   ./scripts/deploy.sh local --clear    wipe the database first
 #
-# `local` is the only target. Remote deployment needs an account and a host, which is
-# a decision for a human — see docs/blocked.md.
+#   ./scripts/deploy.sh remote           publish the module to the hosted target
+#   ./scripts/deploy.sh remote --seed    ...and seed the demo book (idempotent)
 #
-# Runs in the foreground: the client's dev server is the last thing started, and
-# Ctrl-C tears down whatever this script started. A SpacetimeDB instance that was
+# `local` runs in the foreground: the client's dev server is the last thing started,
+# and Ctrl-C tears down whatever this script started. A SpacetimeDB instance that was
 # already running is left alone, because it is not ours to stop.
+#
+# `remote` starts nothing and serves nothing. It publishes the module to an existing
+# hosted database and exits. The client is not its job — that is a static host, wired
+# up separately (M13.3), and the two are deliberately decoupled so that redeploying
+# the module does not imply redeploying the reader.
+#
+# The remote target and its database name come from the environment, never a
+# hardcoded host:
+#
+#   SPACETIME_REMOTE_SERVER    spacetime server nickname   (default: maincloud)
+#   SPACETIME_REMOTE_DB_NAME   database name               (default: book-of-chaos-83i7y)
+#   SPACETIME_REMOTE_URI       websocket URI for seeding   (default: wss://maincloud.spacetimedb.com)
+#
+# The default name carries a suffix because Maincloud names are platform-wide and the
+# bare `book-of-chaos` was taken. See the M13.1 entry in docs/blocked.md.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO"
 
 DB_NAME="${SPACETIME_DB_NAME:-book-of-chaos}"
+REMOTE_SERVER="${SPACETIME_REMOTE_SERVER:-maincloud}"
+REMOTE_DB_NAME="${SPACETIME_REMOTE_DB_NAME:-book-of-chaos-83i7y}"
+# Kept separate from REMOTE_SERVER rather than derived from it. The server nickname is
+# a CLI-local alias and says nothing about the hostname — deriving one from the other
+# happens to work for `maincloud` and silently produces a wrong URI for anything else.
+REMOTE_URI="${SPACETIME_REMOTE_URI:-wss://maincloud.spacetimedb.com}"
 STDB_PORT="${SPACETIME_PORT:-3000}"
 STDB_HOST="http://localhost:$STDB_PORT"
 CLIENT_PORT="${CLIENT_PORT:-5173}"
@@ -65,15 +86,19 @@ die_stdb() {
 }
 
 TARGET="${1:-}"
-[ "$TARGET" = "local" ] || die "usage: $0 local [--no-seed] [--clear]"
-shift
+case "$TARGET" in
+  local | remote) shift ;;
+  *) die "usage: $0 local [--no-seed] [--clear] | remote [--seed]" ;;
+esac
 
 SEED=1
 CLEAR=0
+REMOTE_SEED=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    --no-seed) SEED=0 ;;
-    --clear) CLEAR=1 ;;
+    --no-seed) [ "$TARGET" = local ] || die "--no-seed applies to local"; SEED=0 ;;
+    --clear) [ "$TARGET" = local ] || die "--clear applies to local"; CLEAR=1 ;;
+    --seed) [ "$TARGET" = remote ] || die "--seed applies to remote"; REMOTE_SEED=1 ;;
     *) die "unknown option: $1" ;;
   esac
   shift
@@ -81,6 +106,37 @@ done
 
 run() { "$REPO/scripts/dev.sh" run "$*"; }
 run_quiet() { "$REPO/scripts/dev.sh" run "$*" >/dev/null 2>&1 || true; }
+
+# --- Remote --------------------------------------------------------------------
+#
+# Returns before any of the local-server machinery below, because none of it
+# applies: nothing is started, so nothing needs tearing down, and the EXIT trap is
+# deliberately not installed yet.
+if [ "$TARGET" = remote ]; then
+  # `--yes` is required and is not a convenience. Publishing to a non-local server
+  # prompts for confirmation on a TTY, and this script is also run from CI and from
+  # background shells where there is no TTY to answer it — there the prompt does not
+  # hang, it reads EOF and aborts with "Publish aborted by user", which reads like a
+  # decision somebody made rather than a missing flag.
+  #
+  # Note what `--yes` here does *not* cover: it is not `--delete-data`, so an
+  # existing hosted database keeps its rows. There is intentionally no remote
+  # equivalent of `--clear`. Wiping a database that readers are using is not a thing
+  # this script should make easy; do it deliberately with the CLI.
+  log "publishing module to $REMOTE_SERVER as $REMOTE_DB_NAME"
+  run "cd server && spacetime publish -s '$REMOTE_SERVER' --yes '$REMOTE_DB_NAME'"
+
+  if [ "$REMOTE_SEED" = 1 ]; then
+    # The seed is idempotent by early-return: it looks for the demo book by title and
+    # does nothing if it is already there. It connects anonymously, so it does not own
+    # a book a previous run created and could not edit one if it wanted to.
+    log "seeding the demo book on $REMOTE_DB_NAME (idempotent)"
+    run "cd client && SPACETIME_URI='$REMOTE_URI' SPACETIME_DB_NAME='$REMOTE_DB_NAME' npm run --silent seed"
+  fi
+
+  log "published. The client is deployed separately — see docs/testing-runbook.md."
+  exit 0
+fi
 
 stdb_up() { curl -sf "$STDB_HOST/v1/ping" >/dev/null 2>&1; }
 
