@@ -97,6 +97,11 @@ async function finishFoundations(page: Page) {
 
 async function completeEveryBlock(page: Page) {
   const button = page.getByRole('button', { name: 'Mark as complete' });
+  // `count()` does not wait. Called before the chapter's blocks arrive over the
+  // subscription it returns 0, the loop completes nothing, and the test fails much
+  // later on a map glyph. Locally the blocks win that race; against Maincloud they
+  // lost it. Every caller opens a chapter that has readings, so one must appear.
+  await expect(button.first()).toBeVisible();
   for (let remaining = await button.count(); remaining > 0; remaining--) {
     await button.first().click();
     await expect(button).toHaveCount(remaining - 1);

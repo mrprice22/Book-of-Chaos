@@ -3,16 +3,83 @@
 A human walkthrough of the demo, start to finish, in under ten minutes. If every box
 here ticks, the demo does what it claims.
 
-Covers v0.1 plus the v0.2 work that has landed. The quiz in §4 arrived with M11;
-hosting is still to come (M13), so everything below is local.
+Covers v0.1 and v0.2. **§H needs nothing but a browser** and is the one to hand
+someone who has never cloned this repository. §0 onward is the local walkthrough, and
+needs a checkout.
 
 Automated coverage is not this document's job — `./scripts/verify.sh` owns that, and
 `client/e2e/smoke.spec.ts` already drives most of the path below in a headless
 browser. What this is for is the part a person has to judge: whether the thing is
 actually usable.
 
-**Prerequisites:** `podman` and `distrobox` on the host, and `./scripts/dev.sh setup`
-run once. Nothing else — no Rust, no Node, no SpacetimeDB on the host.
+---
+
+## H. The hosted demo — no clone, no install (≈5 min)
+
+**Prerequisites:** a current desktop browser. Nothing to download, no account.
+
+Open a **private/incognito window** and go to <https://book-of-chaos.com>.
+
+A private window matters. Your identity is a token the page stores in the browser, and
+progress belongs to that identity — a window that has visited before may already have
+Foundations finished, and none of the checks below would read correctly. Closing the
+private window throws the identity away, which is how you start again.
+
+- [ ] Within a few seconds the page shows **Connected as** and a long hex identity. If
+      it sits on *Connecting…*, the database is unreachable — that is a bug to report,
+      not something to fix on your side
+- [ ] The book **Chaos, Briefly**: *6 chapters*, a reading-time estimate, and a map
+
+Read the map's badges: `○` available · `🔒` locked · `◐` in progress · `✓` complete.
+
+- [ ] Only **Foundations** is `○`. Attractors, Bifurcation and Synthesis are `🔒`
+
+**Read the book.** Click **Foundations**. Its first two blocks are readings; press
+**Mark as complete** on each. The third, *Check yourself*, is a quiz and has no such
+button.
+
+**Fail the quiz.** Choose *Randomness in the rule itself* for the first question and
+*It is a single fixed point* for the second, then **Submit answers**.
+
+- [ ] *You scored 0%.* and *Not passed yet — try again.*, with both questions marked
+      wrong
+
+Click **Back to the book**.
+
+- [ ] Foundations is `◐`, and Attractors is still `🔒`. A failed quiz unlocks nothing
+
+**Pass it.** Open Foundations again. First question: *Sensitive dependence on initial
+conditions*. Second: tick both options that begin *Trajectories…*, and untick the other.
+Press **Try again**.
+
+- [ ] *You scored 100%.* and *Passed.*
+
+**Watch a node unlock.** Click **Back to the book**.
+
+- [ ] Foundations is `✓`, and **Attractors and Bifurcation are now `○`**
+- [ ] Synthesis is still `🔒` — it needs both of them
+
+That is the whole claim of v0.2: the unlock was earned, and the server — not the page —
+decided it was.
+
+Optional, and the most convincing check: press Ctrl+T (⌘T on a Mac) for a second tab
+*in the same private window*, open the site there, and put the two side by side. Finish
+Bifurcation's blocks in one; the other tab's map changes on its own, without a reload.
+
+**What not to do here.** The hosted database is shared with every visitor. The
+*Author* screens work, but a book you **Publish** becomes visible to everyone and
+cannot be unpublished. Leave authoring to the local walkthrough, §6.
+
+**How this copy stays current.** The reader is rebuilt and redeployed by Cloudflare
+on every push to `main`. The module on Maincloud is **not**: it changes only when
+someone runs `./scripts/deploy.sh remote`. So the hosted reader always matches `main`,
+and the database behind it matches whatever was last published by hand.
+
+---
+
+**Prerequisites from here on:** a checkout, `podman` and `distrobox` on the host, and
+`./scripts/dev.sh setup` run once. Nothing else — no Rust, no Node, no SpacetimeDB on
+the host.
 
 ---
 

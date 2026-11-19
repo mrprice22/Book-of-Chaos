@@ -471,14 +471,17 @@ inventing infrastructure.
       served `index.html` points at the hashed bundle, `/chapter/7` returns the app
       rather than a 404, and source paths fall through to the SPA shell instead of
       serving `vite.config.ts`
-- [ ] **M13.4** ~~CI deploys on tag push~~ **Amended 2026-08-08: deploys on push to
+- [x] **M13.4** ~~CI deploys on tag push~~ **Amended 2026-08-08: deploys on push to
       `main`.** Cloudflare's GitHub integration builds on branch pushes and has no
       tag trigger, so tag-gating meant dropping that integration for a GitHub Actions
       job plus a `CLOUDFLARE_API_TOKEN` secret. That is more machinery, and a second
       credential, to gate a release nobody outside the project is waiting on yet.
       Revisit if a mid-milestone commit going live ever actually costs something.
       Still required: `docs/testing-runbook.md` gains a section a human can follow
-      **without cloning the repo**
+      **without cloning the repo** — §H. Verified 2026-11-19: the six reader paths of
+      `client/e2e/smoke.spec.ts` pass against `https://book-of-chaos.com`, including
+      fail-the-quiz, pass-it, watch-Attractors-unlock. The reader deploys on push; the
+      module does not (see the parking lot)
 
 **Acceptance:** someone who has never cloned this repository can open a link, read the
 demo book, fail a quiz, pass it, and watch a node unlock.
@@ -745,3 +748,13 @@ them.** The three v0.1 entries that used to live here became M9.
   approved design before the 2026-11-19 amendment, and it is parked, not dropped. Build it
   only when a needed view provably cannot be expressed as a manifest, and first ask whether
   one new generic block would express it instead.
+
+- **Only half of the hosted demo deploys on push.** Cloudflare rebuilds the reader on
+  every push to `main`; the module on Maincloud changes only when someone runs
+  `./scripts/deploy.sh remote`. Harmless while `server/` is still — nothing in it has
+  changed since M13.2 published it — but the first v0.3 commit that adds a table or
+  changes a reducer will put a reader live that expects a schema the hosted database
+  does not have, and the symptom will be a broken page rather than a failed job.
+  Closing it means a CI job holding a SpacetimeDB token as a secret, which is the second
+  credential the M13.4 amendment chose not to take on. Decide before M16.2 lands, not
+  after the site breaks.
