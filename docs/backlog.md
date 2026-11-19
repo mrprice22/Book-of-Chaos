@@ -517,9 +517,13 @@ guess.
       hosted issuer, with the module checking `iss` and `aud`, and a two-step link for the
       carry-over. Provider: SpacetimeAuth, client `client_0350We80wbokeNK7YI9r5X`, approved
       and enabled by the human
-- [ ] **M14.3** Measured row and reducer-argument size limits on Maincloud. They set the
+- [x] **M14.3** Measured row and reducer-argument size limits on Maincloud. They set the
       size caps for documents, schemas and view manifests, and how journal payloads are
       chunked
+      Decided in [0003](./decisions/0003-size-limits.md): the HTTP body (~1.98 MiB) binds.
+      The caps are 256 KiB for a document, 64 KiB for a schema and for a manifest, and 256 KiB
+      for a journal chunk. An oversized WebSocket call hangs, so clients check caps before
+      sending
 - [ ] **M14.4** Filtered subscriptions by `work_id` and `branch_id` from the React client,
       with the row counts a client receives before and after
 - [ ] **M14.5** A Python process calls a reducer and runs a SQL query over the HTTP API with a
@@ -597,7 +601,7 @@ afterwards.
 ## M18 — Typed documents and owner-only state
 
 - [ ] **M18.1** `node_documents`: node, `schema_id`, `body_json`, with the size cap from
-      M14.3. The server checks ownership and size and never parses the body
+      M14.3 (256 KiB, [0003](./decisions/0003-size-limits.md)). The server checks ownership and size and never parses the body
 - [ ] **M18.2** A document's value at a node is the latest one along its ancestor path,
       computed in a pure function with tests (the same engine shape as `unlock.rs`)
 - [ ] **M18.3** The owner-only store M14.1 chose, holding each node's journal and the scene
@@ -605,7 +609,8 @@ afterwards.
       [0001](./decisions/0001-owner-only-reads.md): a private table, read only through a
       `#[view(public)]` on `ViewContext` that returns the caller's works' rows plus those of
       works whose `work_workers` names the caller. Views reach rows only by index, so the
-      owning column and `work_workers`' worker column are indexed
+      owning column and `work_workers`' worker column are indexed. Journals and checkpoints
+      are stored as ordered chunks of at most 256 KiB, split by the worker (0003)
 - [ ] **M18.4** A live-database e2e test, in the style of `answer-key.spec.ts`, proving a
       non-owner client cannot read the owner-only store. The stranger owns rows of their
       own, a revoke is seen to remove the worker's rows live, and a deliberately leaky
