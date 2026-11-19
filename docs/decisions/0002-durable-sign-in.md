@@ -112,16 +112,15 @@ The project's login page offers an **anonymous** option beside the magic link. A
 it carries SpacetimeAuth's issuer and this project's client ID, so it passes check 2 as the
 spike wrote it. "Signed in" for v0.3 means a reader who can come back as the same person.
 An anonymous SpacetimeAuth login is not that, and it must not be able to claim a username
-through `complete_link` or fork (M15.3). Two ways to close it, both for M15:
+through `complete_link` or fork (M15.3).
 
-- turn anonymous off for the project in the SpacetimeAuth dashboard. The app already lets
-  people browse anonymously with SpacetimeDB's own tokens, so nothing is lost. Or
-- have the module tell the two apart by a claim. Which claim marks an anonymous
-  SpacetimeAuth token is not documented in what was read, so this needs a real token to
-  look at.
-
-The first is simpler. Either way, M15.3's rejection tests include a token shaped like an
-anonymous SpacetimeAuth one.
+The human has ruled that anonymous login **stays on**. An anonymous reader gets read-only
+access to the books enabled for anonymous access (the scope's second 2026-11-19 amendment).
+So turning it off in the dashboard is not an option. The module has to tell an anonymous
+SpacetimeAuth token from a signed-in one by a claim. Which claim marks it is not documented
+in what was read, so M15.1 starts by signing in both ways and reading the two payloads
+(`raw_payload()`). M15.3's rejection tests then include a token shaped like the anonymous
+one.
 
 ## Not measured
 

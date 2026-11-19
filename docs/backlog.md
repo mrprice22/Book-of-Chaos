@@ -538,7 +538,11 @@ M16–M19 below are amended where a record changed their shape.
       `reader_progress`, `quiz_attempts`), not only the username
 - [ ] **M15.3** Anonymous visitors can browse public works and cannot call any writing
       reducer, with a rejection test per reducer. "Anonymous" includes SpacetimeAuth's own
-      anonymous login, which carries the trusted issuer and client ID (0002)
+      anonymous login, which carries the trusted issuer and client ID (0002). Per the scope's
+      second 2026-11-19 amendment, an anonymous reader is **read-only** and sees only the
+      books whose owner enabled anonymous access. That is enforced by the server, through a
+      caller-aware view over private book tables (0001), and proved by a live test that an
+      anonymous client cannot read a book without the setting
 
 **Acceptance:** a browser with cleared storage signs back in as the same identity and sees its
 own private branches.
