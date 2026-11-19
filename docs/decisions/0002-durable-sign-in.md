@@ -1,0 +1,117 @@
+# 0002 — Durable sign-in: OIDC ID tokens from a hosted issuer, checked by the module
+
+**Task:** M14.2 · **Date:** 2026-11-19 · **Status:** mechanism decided. The provider is
+recommended and waits on a human: see the M14.2 entry in [blocked.md](../blocked.md).
+
+## Question
+
+How does a reader sign in so that the identity survives a cleared browser, with no mail
+server run by this project? The two candidates were SpacetimeDB's OIDC token support and
+a hosted identity provider. And what does an existing anonymous `users` row need, to carry
+its username over?
+
+## Answer
+
+**The candidates are one mechanism, not two.** SpacetimeDB itself mints only anonymous
+tokens (issuer `localhost` on a local server). What it supports is *accepting* an OIDC ID
+token from any issuer. It verifies the signature against the issuer's JWKS and derives the
+identity from `iss` + `sub`. Someone else has to issue the token, and that is the hosted
+provider. The decision is therefore:
+
+1. **The reader signs in with a hosted OIDC provider** and connects with the ID token
+   (`withToken`). The identity is a pure function of `(iss, sub)`, so a cleared browser that
+   signs in again is the same identity. No state on the device matters.
+2. **The module, not the server, decides which issuers count.** The server accepts a valid
+   token from *any* OIDC issuer. A module that does not check `iss` and `aud` lets anyone
+   who runs an issuer mint any `sub` they like. Every "is this caller signed in" decision
+   goes through one function that checks both.
+3. **A username carries over by a two-step link** (below), not by trusting the client.
+
+**Recommended provider: SpacetimeAuth** (issuer `https://auth.spacetimedb.com/oidc`). It is
+run by SpacetimeDB's makers, it is enabled per Maincloud module from the dashboard, it
+offers magic link, GitHub, Google and Discord, among others, and it sends its own mail. So it
+meets "no mail server run by this project" without adding a second vendor. It is labelled
+beta, and the pricing page lists it as built into Maincloud plans, but which tiers include it
+could not be read reliably. That, and the dashboard setup, is why this waits on a human.
+
+## Evidence
+
+`spikes/m14.2-oidc/` holds a module, a mock OIDC issuer (`issuer.mjs`: discovery, JWKS and
+a `/mint` endpoint) and `run.sh`, the reproduction:
+
+```bash
+./scripts/dev.sh run spikes/m14.2-oidc/run.sh                 # exit 0
+./scripts/dev.sh run 'TRUST_ANY=1 spikes/m14.2-oidc/run.sh'   # negative control: exit 1
+```
+
+It runs a scratch SpacetimeDB 2.8.0 on port 3100 (module crate pinned `=2.8.0`), a trusted
+issuer on 3200, and on 3201 a second, valid issuer that the module does not trust. The
+mock stands in for the provider's login page, which is the part that does not involve
+SpacetimeDB. Recorded run, 2026-11-19: **24 of 24 probes passed.**
+
+| Probe | Result |
+|---|---|
+| A second, freshly minted token for the same `sub` (a cleared browser signing in again) | same identity |
+| A different `sub` / the same `sub` at another issuer | a different identity / a different identity |
+| The WebSocket path (`withToken`, as the reader would) | same identity as over HTTP |
+| A token signed by a key outside the JWKS | HTTP 401, WebSocket refused |
+| A token 10 minutes past `exp` | HTTP 401 |
+| A token 30 s past `exp` | **accepted**: the validator allows some leeway (printed, not asserted) |
+| A valid token from the issuer nobody chose | **accepted by the server**. The module's check is what refuses it |
+| The right issuer, the wrong `aud` | not signed in |
+| Carry-over: `begin_link` by a signed-in caller, or by one with no username | refused |
+| The link code | readable by the old identity only, through a `ViewContext` view (decision [0001](./0001-owner-only-reads.md)) |
+| `complete_link` by an anonymous caller, the untrusted issuer's caller, or with a wrong code | refused |
+| `complete_link` by the signed-in caller | the username moves, the old identity has no row, the code is burnt |
+| The same `sub` on yet another fresh token | still holds the username |
+
+**Watched failing.** `TRUST_ANY=1` builds the module with the `iss`/`aud` check removed.
+Five probes go red. Worst among them: the untrusted issuer's `carol` completes the link and
+takes `ada`'s username, and the genuine sign-in is then told the link was already used. That
+is the attack check 2 exists to stop, and it is not hypothetical.
+
+## The carry-over, and what it must move
+
+Neither identity can vouch for the other inside one reducer call, because a call has one
+caller. So:
+
+1. The **anonymous** identity calls `begin_link`. The server stores a random one-time code in
+   a private table, readable only by that identity.
+2. The browser still holds the anonymous token in localStorage when the sign-in redirect
+   returns. It reads the code with that token, then calls `complete_link(code)` with the new
+   one. To the user it is one click.
+3. `complete_link` requires a trusted signed-in caller with no username of its own, and a
+   fresh, unused code. Then it moves the row and burns the code.
+
+The spike moves only `users`. **The real module has four identity-keyed tables:**
+`users.identity`, `books.owner`, `reader_progress.identity` and `quiz_attempts.identity`.
+A link that moved only the username would leave a returning author locked out of their own
+books. So M15.2's `complete_link` rewrites all four in the same transaction, refuses if the
+new identity already owns rows in any of them, and is tested on each.
+
+## Consequences for later work
+
+- **M15.1.** The trusted issuer and client id cannot be a constant. The hosted module needs
+  SpacetimeAuth's, while the e2e stages need a mock issuer like this spike's, because no CI
+  run can click through a login page. The shape: `init` records `ctx.sender()`, the
+  publisher, as the operator in a private config table. An operator-only reducer sets the
+  trusted `(issuer, client_id)` pairs, and `deploy.sh` sets them per target. The client id is
+  public by design (it ships in the page), so committing it is fine.
+- **M15.3.** "Anonymous" means *not signed in by the module's rule*, which is wider than
+  "the token's issuer is `localhost`". A valid token from an untrusted issuer is anonymous
+  too. The rejection test per writing reducer should use one of each.
+- **Expiry.** ID tokens expire (the mock used an hour). The client must refresh, or send the
+  user back through sign-in, before reconnecting with a stale token. Otherwise a reconnect
+  fails with 401.
+
+## Not measured
+
+- **SpacetimeAuth itself.** No SpacetimeAuth project exists yet, so no real token was used.
+  Nothing here depends on SpacetimeAuth specifically: it is a standard OIDC issuer, and the
+  module's check is the same shape as the one its docs give.
+- **Maincloud's anonymous issuer.** The local server's anonymous tokens say `localhost`.
+  Maincloud's were not looked at, and the design does not rely on the value: anything that
+  fails the trusted-issuer check is anonymous.
+- **Whether a self-hosted server can validate SpacetimeAuth tokens.** The local dev server
+  would fetch its JWKS over the public internet. That is expected to work, but it is
+  undocumented and the CI design above does not need it.

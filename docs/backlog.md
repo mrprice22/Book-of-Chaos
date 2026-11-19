@@ -510,9 +510,12 @@ guess.
       Decided in [0001](./decisions/0001-owner-only-reads.md): yes, a private table behind a
       `ViewContext` view. No encryption. The database's own owner (the operator) can still read
       it
-- [ ] **M14.2** Durable sign-in: SpacetimeDB OIDC tokens, or a hosted identity provider,
+- [~] **M14.2** Durable sign-in: SpacetimeDB OIDC tokens, or a hosted identity provider,
       with no mail server run by this project. Record what an existing anonymous `users` row
       needs to carry its username over
+      Mechanism decided in [0002](./decisions/0002-durable-sign-in.md): OIDC ID tokens from a
+      hosted issuer, with the module checking `iss` and `aud`, and a two-step link for the
+      carry-over. **Waiting on the provider** (SpacetimeAuth recommended): see `blocked.md`
 - [ ] **M14.3** Measured row and reducer-argument size limits on Maincloud. They set the
       size caps for documents, schemas and view manifests, and how journal payloads are
       chunked
@@ -526,8 +529,12 @@ M16–M19 below are amended where a record changed their shape.
 
 ## M15 — Durable sign-in
 
-- [ ] **M15.1** Sign-in per M14.2. The identity survives a cleared browser
-- [ ] **M15.2** Existing `users` rows keep their username through the switch
+- [ ] **M15.1** Sign-in per M14.2. The identity survives a cleared browser. The trusted
+      `(issuer, client_id)` pairs are operator-set data rather than a constant, so the e2e
+      stages can trust a mock issuer and the hosted module SpacetimeAuth (0002)
+- [ ] **M15.2** Existing `users` rows keep their username through the switch, by 0002's
+      two-step link. It moves every identity-keyed row (`users`, `books.owner`,
+      `reader_progress`, `quiz_attempts`), not only the username
 - [ ] **M15.3** Anonymous visitors can browse public works and cannot call any writing
       reducer, with a rejection test per reducer
 
