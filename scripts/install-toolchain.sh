@@ -54,13 +54,24 @@ nvm alias default "$NODE_MAJOR"
 if [ "$(spacetime --version 2>/dev/null | sed -n 's/.*tool version \([0-9.]*\);.*/\1/p')" \
      != "$SPACETIMEDB_VERSION" ]; then
   log "installing SpacetimeDB CLI $SPACETIMEDB_VERSION"
-  # The installer defaults this to releases/latest/download. Pointing it at a tag is
-  # the difference between a pinned toolchain and whatever upstream shipped today.
-  # The assignment belongs to `sh`, which runs the installer — putting it in front of
-  # `curl` would set it for the download and not for the script that reads it.
-  curl -sSf https://install.spacetimedb.com \
-    | SPACETIME_DOWNLOAD_ROOT="https://github.com/clockworklabs/SpacetimeDB/releases/download/v${SPACETIMEDB_VERSION}" \
-      sh -s -- --yes
+  # The installer is two programs, and pointing it at a tag pins only the first. The
+  # script at install.spacetimedb.com downloads `spacetimedb-update` (the version
+  # manager behind `spacetime version`) from SPACETIME_DOWNLOAD_ROOT, and that manager
+  # then installs the NEWEST CLI release, whatever the root pointed at. Until the
+  # newest release stopped being 2.8.0, CI only looked pinned. Run #21 got 2.15.0 for a
+  # 2.8.0 pin and went red at preflight. `version install` below is what pins.
+  #
+  # The installer runs only when no working manager is present. That includes the
+  # half-restored cache described above, since a launcher without its binaries cannot
+  # list anything. The assignment belongs to `sh`, which runs the installer — putting
+  # it in front of `curl` would set it for the download and not for the script.
+  if ! spacetime version list >/dev/null 2>&1; then
+    curl -sSf https://install.spacetimedb.com \
+      | SPACETIME_DOWNLOAD_ROOT="https://github.com/clockworklabs/SpacetimeDB/releases/download/v${SPACETIMEDB_VERSION}" \
+        sh -s -- --yes
+  fi
+  # Idempotent: re-running it for an installed version just switches back to it.
+  spacetime version install "$SPACETIMEDB_VERSION" --use --yes
 fi
 
 # --- binaryen / wasm-opt ----------------------------------------------------
