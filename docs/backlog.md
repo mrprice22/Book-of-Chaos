@@ -542,7 +542,10 @@ M16–M19 below are amended where a record changed their shape.
       second 2026-11-19 amendment, an anonymous reader is **read-only** and sees only the
       books whose owner enabled anonymous access. That is enforced by the server, through a
       caller-aware view over private book tables (0001), and proved by a live test that an
-      anonymous client cannot read a book without the setting
+      anonymous client cannot read a book without the setting. Anonymous readers may still
+      take quizzes, graded by a `#[procedure]` that returns the verdict and writes nothing.
+      Their progress lives only in browser storage, labelled in the UI as losable, and a test
+      proves an anonymous attempt leaves no row behind
 
 **Acceptance:** a browser with cleared storage signs back in as the same identity and sees its
 own private branches.
