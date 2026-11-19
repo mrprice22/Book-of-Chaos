@@ -1,0 +1,22 @@
+[package]
+name = "m14_1_owner_view_spike"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# A throwaway module for the M14.1 spike. Not part of the product, not in the gate:
+# docs/decisions/0001-owner-only-reads.md is the deliverable, and spikes/m14.1-owner-view/run.sh
+# is how to reproduce it.
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+# The negative control: the view returns every row regardless of caller. run.sh's
+# probes must go red under it, or they prove nothing.
+leaky = []
+
+[dependencies]
+# Pinned to the version server/Cargo.lock resolves, so the answer is about the module
+# this repo actually ships rather than whatever 2.8.x was newest on the day.
+spacetimedb = "=2.8.0"

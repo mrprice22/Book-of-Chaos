@@ -59,6 +59,8 @@ client/                 Vite + React + TypeScript reader/author UI
 scripts/                dev container, verify gate, seed, deploy
 docs/                   scope, backlog, escalations, runbook
   contracts/integration/  the contract every generating integration builds against (v0.3)
+  decisions/            what each M14 spike settled, and the run that settled it
+spikes/                 throwaway modules and probes behind docs/decisions/; not in the gate
 ```
 
 ## Conventions

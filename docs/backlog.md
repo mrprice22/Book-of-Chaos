@@ -503,10 +503,13 @@ integration, and no reducer edits or deletes a node.
 that cannot be answered without an account or a credential is a `blocked.md` entry, not a
 guess.
 
-- [ ] **M14.1** Owner-only reads: can a SpacetimeDB 2.8 view filter a private table by
+- [x] **M14.1** Owner-only reads: can a SpacetimeDB 2.8 view filter a private table by
       `ctx.sender`, so an owner and an authorized worker read rows that a third identity
       provably cannot? If not, the decision is to store a payload the worker encrypts before
       upload, and to record that the server never holds the key
+      Decided in [0001](./decisions/0001-owner-only-reads.md): yes, a private table behind a
+      `ViewContext` view. No encryption. The database's own owner (the operator) can still read
+      it
 - [ ] **M14.2** Durable sign-in: SpacetimeDB OIDC tokens, or a hosted identity provider,
       with no mail server run by this project. Record what an existing anonymous `users` row
       needs to carry its username over
@@ -582,9 +585,15 @@ afterwards.
 - [ ] **M18.2** A document's value at a node is the latest one along its ancestor path,
       computed in a pure function with tests (the same engine shape as `unlock.rs`)
 - [ ] **M18.3** The owner-only store M14.1 chose, holding each node's journal and the scene
-      checkpoints, written only by an authorized worker
+      checkpoints, written only by an authorized worker. Per
+      [0001](./decisions/0001-owner-only-reads.md): a private table, read only through a
+      `#[view(public)]` on `ViewContext` that returns the caller's works' rows plus those of
+      works whose `work_workers` names the caller. Views reach rows only by index, so the
+      owning column and `work_workers`' worker column are indexed
 - [ ] **M18.4** A live-database e2e test, in the style of `answer-key.spec.ts`, proving a
-      non-owner client cannot read the owner-only store
+      non-owner client cannot read the owner-only store. The stranger owns rows of their
+      own, a revoke is seen to remove the worker's rows live, and a deliberately leaky
+      view is watched turning it red, as `spikes/m14.1-owner-view/run.sh` did
 
 **Acceptance:** a viewer's subscription carries documents and never owner-only state, and the
 test that proves it went red first.
@@ -758,3 +767,11 @@ them.** The three v0.1 entries that used to live here became M9.
   Closing it means a CI job holding a SpacetimeDB token as a secret, which is the second
   credential the M13.4 amendment chose not to take on. Decide before M16.2 lands, not
   after the site breaks.
+
+- **Owner-only state is readable by the operator.** M14.1
+  ([0001](./decisions/0001-owner-only-reads.md)) settled owner-only reads with a private
+  table behind a view, which keeps out every other client but not the identity that
+  publishes the module: `spacetime sql` as that identity reads every row. That is true of
+  every private table here, `quiz_answer_key` included, and v0.3 asks for no more. If a
+  later release must exclude the operator too, the design is the one M14.1 did not need: the
+  worker encrypts before upload, and the server never holds the key.
