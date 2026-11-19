@@ -1,7 +1,8 @@
 # 0002 — Durable sign-in: OIDC ID tokens from a hosted issuer, checked by the module
 
-**Task:** M14.2 · **Date:** 2026-11-19 · **Status:** mechanism decided. The provider is
-recommended and waits on a human: see the M14.2 entry in [blocked.md](../blocked.md).
+**Task:** M14.2 · **Date:** 2026-11-19 · **Status:** decided. The provider is SpacetimeAuth,
+approved and enabled by the human the same day, client ID `client_0350We80wbokeNK7YI9r5X`
+(see the resolved M14.2 entry in [blocked.md](../blocked.md)).
 
 ## Question
 
@@ -27,12 +28,13 @@ provider. The decision is therefore:
    goes through one function that checks both.
 3. **A username carries over by a two-step link** (below), not by trusting the client.
 
-**Recommended provider: SpacetimeAuth** (issuer `https://auth.spacetimedb.com/oidc`). It is
+**Provider: SpacetimeAuth** (issuer `https://auth.spacetimedb.com/oidc`, client ID
+`client_0350We80wbokeNK7YI9r5X`). This was recommended here and approved by the human. It is
 run by SpacetimeDB's makers, it is enabled per Maincloud module from the dashboard, it
 offers magic link, GitHub, Google and Discord, among others, and it sends its own mail. So it
 meets "no mail server run by this project" without adding a second vendor. It is labelled
 beta, and the pricing page lists it as built into Maincloud plans, but which tiers include it
-could not be read reliably. That, and the dashboard setup, is why this waits on a human.
+could not be read reliably. That, and the dashboard setup, is why it waited on a human.
 
 ## Evidence
 
@@ -104,11 +106,28 @@ new identity already owns rows in any of them, and is tested on each.
   user back through sign-in, before reconnecting with a stale token. Otherwise a reconnect
   fails with 401.
 
+## SpacetimeAuth's own anonymous login
+
+The project's login page offers an **anonymous** option beside the magic link. A token from
+it carries SpacetimeAuth's issuer and this project's client ID, so it passes check 2 as the
+spike wrote it. "Signed in" for v0.3 means a reader who can come back as the same person.
+An anonymous SpacetimeAuth login is not that, and it must not be able to claim a username
+through `complete_link` or fork (M15.3). Two ways to close it, both for M15:
+
+- turn anonymous off for the project in the SpacetimeAuth dashboard. The app already lets
+  people browse anonymously with SpacetimeDB's own tokens, so nothing is lost. Or
+- have the module tell the two apart by a claim. Which claim marks an anonymous
+  SpacetimeAuth token is not documented in what was read, so this needs a real token to
+  look at.
+
+The first is simpler. Either way, M15.3's rejection tests include a token shaped like an
+anonymous SpacetimeAuth one.
+
 ## Not measured
 
-- **SpacetimeAuth itself.** No SpacetimeAuth project exists yet, so no real token was used.
-  Nothing here depends on SpacetimeAuth specifically: it is a standard OIDC issuer, and the
-  module's check is the same shape as the one its docs give.
+- **A real SpacetimeAuth token.** The project exists and its discovery document, client ID
+  and redirect URIs were checked (blocked.md, resolved M14.2). But no one has signed in, so
+  no real token has been through a module yet. That is M15.1's first live run.
 - **Maincloud's anonymous issuer.** The local server's anonymous tokens say `localhost`.
   Maincloud's were not looked at, and the design does not rely on the value: anything that
   fails the trusted-issuer check is anonymous.

@@ -36,33 +36,26 @@ didn't work" is not an entry.
 
 ## Open
 
-### M14.2 — the sign-in provider is a vendor and an account, and only you can pick and enable it
-**Date:** 2026-11-19
-**Tried:** the whole mechanism, against a mock OIDC issuer, with no account needed.
-`spikes/m14.2-oidc/run.sh` passed 24 of 24 probes: stable identity across a fresh token,
-forged and expired tokens refused, an untrusted issuer and a wrong `aud` not signed in,
-and a two-step username carry-over that resists both. A negative control showed the
-module's issuer check is what stops an untrusted issuer from taking a username.
-Recorded in [0002](./decisions/0002-durable-sign-in.md).
-**Blocker:** a real provider needs an account setting changed and a choice made. SpacetimeAuth is
-enabled per module from the Maincloud dashboard (profile → the module → SpacetimeAuth
-→ "Use SpacetimeAuth"). Its client needs redirect URIs, and someone has to decide
-which login methods readers get. Whether the current Maincloud plan includes it could
-not be read reliably off the pricing page. None of that can be done or decided from here.
-**Options:**
-- **SpacetimeAuth (recommended).** Same vendor as the database, sends its own mail
-  (magic link), offers GitHub/Google/Discord. It is in beta.
-- Another hosted OIDC provider (Auth0, Clerk...). It works identically from the module's
-  side, but it is a second vendor and a second account.
-- A self-hosted issuer such as Better Auth. Ruled out: it is a server this project would
-  run, and its magic link needs a mail sender.
-**Needs:** (1) a yes to SpacetimeAuth, or the name of the provider instead. (2) If yes,
-enable it on `book-of-chaos-83i7y`. Add redirect URIs `https://book-of-chaos.com/` and
-`http://localhost:5173/` (plus logout ones to match), and pick the login methods
-(suggestion: magic link and GitHub). (3) Paste the client ID here. It is public by
-design and safe to commit. Its client secret is not needed and must not be shared.
+_Nothing is blocked._
 
 ## Resolved
+
+### M14.2 — "the sign-in provider is a vendor and an account, and only you can pick and enable it" (opened 2026-11-19)
+**Resolved:** 2026-11-19, by the human: SpacetimeAuth, enabled on `book-of-chaos-83i7y`, with
+the redirect URIs added and client ID **`client_0350We80wbokeNK7YI9r5X`** (public by design).
+
+Checked from here rather than taken on trust:
+
+- `https://auth.spacetimedb.com/oidc/.well-known/openid-configuration` reports issuer
+  `https://auth.spacetimedb.com/oidc`, JWKS at `/oidc/jwks`, RS256. That is the shape the
+  M14.2 spike's mock issuer had.
+- An authorization request with this client ID and a valid PKCE challenge goes through
+  (303 to `/interactions/…`) for both `https://book-of-chaos.com/` and
+  `http://localhost:5173/`. An unregistered redirect URI is refused with 400, and so is a
+  made-up client ID. So the client exists and both URIs are registered.
+- The login page that follows offers **email magic link** and an **anonymous** option, and
+  nothing else (no GitHub). The anonymous option is the one to watch: see
+  [0002](./decisions/0002-durable-sign-in.md#spacetimeauths-own-anonymous-login).
 
 ### M13.1 — "the hosted SpacetimeDB target needs an account only you can create" (opened 2026-08-08)
 **Resolved:** 2026-08-08, by the account being created and the CLI being logged in.
