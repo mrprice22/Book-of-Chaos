@@ -524,8 +524,11 @@ guess.
       The caps are 256 KiB for a document, 64 KiB for a schema and for a manifest, and 256 KiB
       for a journal chunk. An oversized WebSocket call hangs, so clients check caps before
       sending
-- [ ] **M14.4** Filtered subscriptions by `work_id` and `branch_id` from the React client,
+- [x] **M14.4** Filtered subscriptions by `work_id` and `branch_id` from the React client,
       with the row counts a client receives before and after
+      Decided in [0004](./decisions/0004-filtered-subscriptions.md): `useTable(...where(...))`
+      filters on the server, on tables and on views. 1000 rows unfiltered, 200 for one work, 50
+      for one branch
 - [ ] **M14.5** A Python process calls a reducer and runs a SQL query over the HTTP API with a
       persistent token, and is still the same identity after a restart
 
@@ -647,7 +650,9 @@ waiting.
 - [ ] **M20.3** App shell layout slots (main, side panels, composer) that a manifest places
       documents into, with the existing book screens unchanged
 - [ ] **M20.4** Routes `/w/:workId`, `/w/:workId/b/:branchId` and `/n/:nodeId`, on filtered
-      subscriptions (M14.4)
+      subscriptions (M14.4). The client cache is shared, so one unfiltered `useTable` on a
+      work or node table would pull every row. A test asserts every such subscription
+      carries a `WHERE` (0004)
 - [ ] **M20.5** Branch tree view and rewind scrubber. Every panel shows the documents as of
       the selected node
 - [ ] **M20.6** "Change this response" on a human node opens a fork (M17.4)
