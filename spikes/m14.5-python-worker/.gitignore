@@ -1,0 +1,3 @@
+# The worker's saved token, written by run.sh into a temp dir; never here, but in case.
+*.token
+__pycache__/

@@ -529,8 +529,11 @@ guess.
       Decided in [0004](./decisions/0004-filtered-subscriptions.md): `useTable(...where(...))`
       filters on the server, on tables and on views. 1000 rows unfiltered, 200 for one work, 50
       for one branch
-- [ ] **M14.5** A Python process calls a reducer and runs a SQL query over the HTTP API with a
+- [x] **M14.5** A Python process calls a reducer and runs a SQL query over the HTTP API with a
       persistent token, and is still the same identity after a restart
+      Decided in [0005](./decisions/0005-python-worker.md): stdlib `urllib` and a saved
+      `POST /v1/identity` token (mode 600). It is the same identity across process and server
+      restarts. Worker tokens never expire, so revocation is `work_workers`
 
 **Acceptance:** five decision records exist, each citing the test or run that settled it, and
 M16–M19 below are amended where a record changed their shape.
@@ -552,7 +555,9 @@ M16–M19 below are amended where a record changed their shape.
       anonymous client cannot read a book without the setting. Anonymous readers may still
       take quizzes, graded by a `#[procedure]` that returns the verdict and writes nothing.
       Their progress lives only in browser storage, labelled in the UI as losable, and a test
-      proves an anonymous attempt leaves no row behind
+      proves an anonymous attempt leaves no row behind. A worker's token is anonymous by this
+      rule too (0005). It may call only the worker reducers of works that authorized it, and
+      a test shows it can call no other writing reducer
 
 **Acceptance:** a browser with cleared storage signs back in as the same identity and sees its
 own private branches.
@@ -567,7 +572,9 @@ own private branches.
 - [ ] **M16.2** `works` table: kind (a string, never an enum the core switches on), owner,
       title, visibility, `settings_json`. `create_work` / `update_work` reducers, owner only
 - [ ] **M16.3** `work_workers`: the owner authorizes or revokes a worker identity. Only an
-      authorized worker may write on the work's behalf
+      authorized worker may write on the work's behalf. Worker tokens never expire (0005), so
+      every worker reducer checks this table on every call, and a test shows a revoked
+      worker's very next call refused
 - [ ] **M16.4** Fork policy in `settings_json` (open or off, caps per user and per day),
       validated in `rules.rs` as pure functions with table-driven tests
 - [ ] **M16.5** `work_schemas`: `register_schema`, by the owner or an authorized worker,

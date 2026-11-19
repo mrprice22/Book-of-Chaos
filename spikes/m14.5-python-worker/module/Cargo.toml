@@ -1,0 +1,16 @@
+[package]
+name = "m14_5_python_worker_spike"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# A throwaway module for the M14.5 spike. Not part of the product, not in the gate:
+# docs/decisions/0005-python-worker.md is the deliverable, and spikes/m14.5-python-worker/run.sh
+# is how to reproduce it.
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# Pinned to the version server/Cargo.lock resolves, as in the M14.1 spike.
+spacetimedb = "=2.8.0"
