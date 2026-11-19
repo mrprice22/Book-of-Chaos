@@ -7,14 +7,16 @@ sequence. Built on SpacetimeDB.
 
 | Document | Role |
 |---|---|
-| [docs/v0.2-scope.md](docs/v0.2-scope.md) | **Authoritative scope.** If it is not in here, do not build it. |
+| [docs/v0.2-scope.md](docs/v0.2-scope.md) | **Authoritative scope until M13.4 closes.** If it is not in here, do not build it. |
+| [docs/v0.3-scope.md](docs/v0.3-scope.md) | **Authoritative scope once M13.4 closes** (approved 2026-10-31, amended 2026-11-19 to an integration-agnostic core). Then it replaces v0.2. |
 | [docs/backlog.md](docs/backlog.md) | The work queue. Top to bottom, one task at a time. |
 | [docs/blocked.md](docs/blocked.md) | Where to escalate instead of guessing. |
 | [docs/mvp-scope.md](docs/mvp-scope.md) | The v0.1 contract. **Shipped** — history, not a queue. |
 | [book-of-chaos-design.md](book-of-chaos-design.md) | Long-term product design. Aspirational — **most of it is deferred.** |
 
 The design doc describes a large product. Each release is a thin slice of it. When the two
-conflict, `docs/v0.2-scope.md` wins.
+conflict, the current scope document wins: `docs/v0.2-scope.md` until M13.4 closes, then
+`docs/v0.3-scope.md`.
 
 ## Environment
 
@@ -56,6 +58,7 @@ client/                 Vite + React + TypeScript reader/author UI
   src/i18n/en-US.ts     all user-facing strings
 scripts/                dev container, verify gate, seed, deploy
 docs/                   scope, backlog, escalations, runbook
+  contracts/integration/  the contract every generating integration builds against (v0.3)
 ```
 
 ## Conventions
@@ -77,6 +80,9 @@ docs/                   scope, backlog, escalations, runbook
 **Both**
 - Trust boundary is the reducer. Client-side checks are UX, never security.
 - Sanitize block HTML server-side, on write.
+- The core is integration-agnostic. No integration's name or concepts appear in `server/`,
+  `client/` or `scripts/`. An integration reaches this repo only through
+  `docs/contracts/integration/` and the schemas and views it registers as data.
 
 ## Git
 

@@ -2,7 +2,9 @@
 
 **Current release: v0.2 "Earned Completion"** — scope in [v0.2-scope.md](./v0.2-scope.md).
 M0–M8 shipped as v0.1 (tag `v0.1.0`) and are kept below as history; the live work starts
-at M9.
+at M9. **Next release: v0.3 "Branching Works"**, scope in [v0.3-scope.md](./v0.3-scope.md),
+approved 2026-10-31 and amended 2026-11-19. Its tasks (M14–M21) start once M13.4 closes
+v0.2.
 
 This file is the autopilot's task queue and its memory between sessions. It is the
 **single source of truth for what to do next**.
@@ -13,8 +15,9 @@ This file is the autopilot's task queue and its memory between sessions. It is t
 - Exactly one task may be `[~]` (in progress) at a time.
 - A task is only `[x]` when its acceptance criteria are met **and** `./scripts/verify.sh` exits 0.
 - Check the box in the same commit as the work.
-- Do not add features that are not in [v0.2-scope.md](./v0.2-scope.md). If a task seems to
-  require one, that is a signal to stop and write to [blocked.md](./blocked.md).
+- Do not add features that are not in the current scope: [v0.2-scope.md](./v0.2-scope.md)
+  until M13.4 closes, then [v0.3-scope.md](./v0.3-scope.md). If a task seems to require
+  one, that is a signal to stop and write to [blocked.md](./blocked.md).
 
 ## Legend
 
@@ -482,6 +485,172 @@ demo book, fail a quiz, pass it, and watch a node unlock.
 
 ---
 
+# v0.3 "Branching Works": scope in [v0.3-scope.md](./v0.3-scope.md)
+
+Approved 2026-10-31, amended 2026-11-19 to an integration-agnostic core (see the scope's
+amendment). Everything below starts only once M13.4 closes v0.2. The first integration is a
+FATE Core game from `C:/GIT/fate_core_llm` (its `ROADMAP.yml` phase P21). That repo's
+milestones name the ones here that they wait on, and it reaches this repo only through
+`docs/contracts/integration/` and the data it registers. Throughout: no code here names an
+integration, and no reducer edits or deletes a node.
+
+## M14 — Spikes that decide the design
+
+**Each task ends in a `docs/decisions/` record backed by a test or a recorded run.** A spike
+that cannot be answered without an account or a credential is a `blocked.md` entry, not a
+guess.
+
+- [ ] **M14.1** Owner-only reads: can a SpacetimeDB 2.8 view filter a private table by
+      `ctx.sender`, so an owner and an authorized worker read rows that a third identity
+      provably cannot? If not, the decision is to store a payload the worker encrypts before
+      upload, and to record that the server never holds the key
+- [ ] **M14.2** Durable sign-in: SpacetimeDB OIDC tokens, or a hosted identity provider,
+      with no mail server run by this project. Record what an existing anonymous `users` row
+      needs to carry its username over
+- [ ] **M14.3** Measured row and reducer-argument size limits on Maincloud. They set the
+      size caps for documents, schemas and view manifests, and how journal payloads are
+      chunked
+- [ ] **M14.4** Filtered subscriptions by `work_id` and `branch_id` from the React client,
+      with the row counts a client receives before and after
+- [ ] **M14.5** A Python process calls a reducer and runs a SQL query over the HTTP API with a
+      persistent token, and is still the same identity after a restart
+
+**Acceptance:** five decision records exist, each citing the test or run that settled it, and
+M16–M19 below are amended where a record changed their shape.
+
+## M15 — Durable sign-in
+
+- [ ] **M15.1** Sign-in per M14.2. The identity survives a cleared browser
+- [ ] **M15.2** Existing `users` rows keep their username through the switch
+- [ ] **M15.3** Anonymous visitors can browse public works and cannot call any writing
+      reducer, with a rejection test per reducer
+
+**Acceptance:** a browser with cleared storage signs back in as the same identity and sees its
+own private branches.
+
+## M16 — The generic core: works
+
+- [ ] **M16.1** The agnostic guard: a `verify.sh` stage that fails if `server/`, `client/` or
+      `scripts/` (outside dependencies and build output) contains the name of a known
+      integration, read from `docs/contracts/integration/known-integrations.txt` (starting
+      with `fate`). Watched failing on a planted name before it is trusted. Tests use neutral
+      kind strings such as `demo`
+- [ ] **M16.2** `works` table: kind (a string, never an enum the core switches on), owner,
+      title, visibility, `settings_json`. `create_work` / `update_work` reducers, owner only
+- [ ] **M16.3** `work_workers`: the owner authorizes or revokes a worker identity. Only an
+      authorized worker may write on the work's behalf
+- [ ] **M16.4** Fork policy in `settings_json` (open or off, caps per user and per day),
+      validated in `rules.rs` as pure functions with table-driven tests
+- [ ] **M16.5** `work_schemas`: `register_schema`, by the owner or an authorized worker,
+      stores a `schema_id`, its JSON Schema and an optional view manifest. The manifest's
+      shape is written as `docs/contracts/integration/view-manifest.schema.json`, and is
+      checked on write by a pure function in `rules.rs` with table-driven tests (an unknown
+      block, a field reference that is not a JSON Pointer, an unknown slot, an oversized
+      manifest). The server still never parses a document body
+
+**Acceptance:** a work of any kind string is created and configured by its owner, and
+registers a schema with a view. A stranger's `update_work`, an unauthorized worker's write,
+and a malformed manifest are all refused. The guard stage is red on a planted integration
+name and green without it.
+
+## M17 — The timeline tree
+
+- [ ] **M17.1** `nodes` table: ULID id, work, parent, branch, author identity, role
+      (`human`/`worker`), `payload_json`. There is **no** update or delete reducer. A gate
+      check fails if one is added
+- [ ] **M17.2** `branches` table: fork node, owner, head, visibility
+      (`private`/`shared`/`public`), hidden flag
+- [ ] **M17.3** `append_node`: only at the branch head, only by the branch owner or an
+      authorized worker
+- [ ] **M17.4** `fork`: a new human node whose parent is an existing node's parent, on a new
+      branch owned by the caller, private by default, refused when the work's fork policy says
+      so
+- [ ] **M17.5** `share_branch`, `hide_branch`, and `purge_branch` (the work owner only, a
+      hidden branch only, the tree's one deletion)
+
+**Acceptance:** an append anywhere but the head is refused, an existing node cannot be changed
+by any reducer, a fork creates a sibling, and the original branch's nodes are byte-identical
+afterwards.
+
+## M18 — Typed documents and owner-only state
+
+- [ ] **M18.1** `node_documents`: node, `schema_id`, `body_json`, with the size cap from
+      M14.3. The server checks ownership and size and never parses the body
+- [ ] **M18.2** A document's value at a node is the latest one along its ancestor path,
+      computed in a pure function with tests (the same engine shape as `unlock.rs`)
+- [ ] **M18.3** The owner-only store M14.1 chose, holding each node's journal and the scene
+      checkpoints, written only by an authorized worker
+- [ ] **M18.4** A live-database e2e test, in the style of `answer-key.spec.ts`, proving a
+      non-owner client cannot read the owner-only store
+
+**Acceptance:** a viewer's subscription carries documents and never owner-only state, and the
+test that proves it went red first.
+
+## M19 — The request queue
+
+- [ ] **M19.1** `requests` table: kind (fork or turn), branch, text, status, claimed by,
+      claimed at
+- [ ] **M19.2** `request_turn` and `request_fork`, with per-user rate limits and the owner's
+      caps enforced in the reducer
+- [ ] **M19.3** `claim_request`, `complete_request` and `release_request` for authorized
+      workers only. A claim cannot be taken twice, and a stale claim is released after a
+      timeout
+- [ ] **M19.4** Worker online state (a heartbeat reducer), shown wherever a request waits
+
+**Acceptance:** an over-cap request is refused by the server, two workers racing for one
+request leave exactly one claim, and a request made while no worker is online shows as
+waiting.
+
+## M20 — Views and the timeline browser
+
+- [ ] **M20.1** Generic display blocks: text, heading, fields (a key-value stat block), list,
+      tags, track (a row of boxes, some marked), countdown, and graph (nodes and edges, drawn
+      through `client/src/map/KnowledgeMap.tsx` on the `mermaidSource.ts` pattern). Each is a
+      component with tests, and none knows what kind of work it draws
+- [ ] **M20.2** The manifest interpreter: a document is checked against its registered schema,
+      then drawn by its view manifest. No manifest, or a document that fails its schema,
+      renders as a read-only JSON view. A manifest's labels are the integration's content and
+      do not go through `t()`. The shell's own strings still do
+- [ ] **M20.3** App shell layout slots (main, side panels, composer) that a manifest places
+      documents into, with the existing book screens unchanged
+- [ ] **M20.4** Routes `/w/:workId`, `/w/:workId/b/:branchId` and `/n/:nodeId`, on filtered
+      subscriptions (M14.4)
+- [ ] **M20.5** Branch tree view and rewind scrubber. Every panel shows the documents as of
+      the selected node
+- [ ] **M20.6** "Change this response" on a human node opens a fork (M17.4)
+- [ ] **M20.7** A composer that posts turn requests (M19.2), with queued, waiting-for-worker
+      and generating states
+
+**Acceptance:** opening a node in the middle of a branch shows the side panels as they were
+then, drawn from registered views. Changing its human response creates a private branch that
+appears in the tree. A schema with no view still shows its documents, as JSON.
+
+## M21 — The integration contract and a stand-in integration
+
+- [ ] **M21.1** `docs/contracts/integration/` at v1: the protocol (minting and keeping a
+      worker identity, authorization, the reducers and SQL reads a worker uses, the request
+      lifecycle, the size caps from M14.3, and one-shot publishing to a work whose forking is
+      off), JSON Schemas for the document envelope and the view manifest, and conformance
+      fixtures. vitest validates every fixture
+- [ ] **M21.2** A stand-in integration under `scripts/`, run the way `seed.ts` is, that uses
+      nothing but the contract: it registers its own small schema and view, claims a turn
+      request, and appends a worker node with its documents
+- [ ] **M21.3** A seeded work for the stand-in, and an e2e test that plays one turn from the
+      browser through it
+- [ ] **M21.4** `docs/testing-runbook.md` gains "Connecting an integration": mint a worker
+      identity, authorize it, register schemas and views, play a turn. `fate_core_llm` is the
+      worked example
+- [ ] **M21.5** The recorded live run: `fate_core_llm`'s worker (its M94/M95), written against
+      the contract alone, plays a turn typed at the hosted URL, and its documents render
+      through the views it registered. If that worker is not ready, this is a `blocked.md`
+      entry, not a stand-in
+
+**Acceptance:** in a browser, a seeded work plays a turn through the stand-in and its panels
+update. A fate game is played at the public URL with no commit to this repo, and the guard
+stage is still green.
+
+---
+
 ## Post-MVP parking lot
 
 Ideas encountered while building that are out of scope. **Append here instead of building
@@ -565,6 +734,14 @@ them.** The three v0.1 entries that used to live here became M9.
   stage would catch, and it remains uncaught. Supersedes the earlier note above,
   which asked for the same thing with a weaker argument.
 
-- **Durable identity is the strongest candidate for v0.3.** Once v0.2 is at a public URL,
-  progress still lives in one browser's localStorage with no recovery path. Deferred here
-  only because it needs mail infrastructure, not because it is unimportant.
+- **Books onto the generic core.** v0.3 builds `works`, `nodes` and `node_documents` beside
+  the book tables rather than under them. Moving books, chapters and blocks onto the core
+  (a book as a work kind, chapters and blocks as documents) is its own decision, deferred in
+  `v0.3-scope.md`. Do it only when a second non-book kind, or versioned books, needs it.
+
+- **Code renderers per kind.** v0.3 draws every integration's documents with generic blocks
+  and a view manifest the integration registers as data (M16.5, M20), so no integration's
+  code lives here. A `client/src/kinds/<kind>/` registry of `schema_id → component` was the
+  approved design before the 2026-11-19 amendment, and it is parked, not dropped. Build it
+  only when a needed view provably cannot be expressed as a manifest, and first ask whether
+  one new generic block would express it instead.
