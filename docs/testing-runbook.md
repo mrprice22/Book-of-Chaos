@@ -96,7 +96,7 @@ the host.
 ./scripts/verify.sh
 ```
 
-Expect `VERIFY GREEN  15 ran, 0 skipped`.
+Expect `VERIFY GREEN  16 ran, 0 skipped`.
 
 If `preflight` FAILs, stop and read it: it means the toolchain does not match the pins
 in `scripts/toolchain-versions.sh`, and every stage after it would be testing something

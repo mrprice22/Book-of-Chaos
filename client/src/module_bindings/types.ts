@@ -84,6 +84,13 @@ export const KnowledgeBlock = __t.object("KnowledgeBlock", {
 });
 export type KnowledgeBlock = __Infer<typeof KnowledgeBlock>;
 
+export const LinkRequest = __t.object("LinkRequest", {
+  fromIdentity: __t.identity(),
+  toIdentity: __t.identity(),
+  createdAt: __t.timestamp(),
+});
+export type LinkRequest = __Infer<typeof LinkRequest>;
+
 export const QuizAnswerInput = __t.object("QuizAnswerInput", {
   questionId: __t.u64(),
   selectedOptionIds: __t.array(__t.u64()),

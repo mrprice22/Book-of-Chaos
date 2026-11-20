@@ -561,13 +561,20 @@ M16–M19 below are amended where a record changed their shape.
       on `https://book-of-chaos.com`: still signed in after 20 minutes, and after a reload
       past that. So SpacetimeAuth's refresh response does carry a new ID token, because the
       client counts a refresh that keeps the old one as a failure
-- [ ] **M15.2** Existing `users` rows keep their username through the switch, by 0002's
+- [x] **M15.2** Existing `users` rows keep their username through the switch, by 0002's
       two-step link. It moves every identity-keyed row (`users`, `books.owner`,
       `reader_progress`, `quiz_attempts`), not only the username
+      `begin_link(target)` and `complete_link(from)`, and the browser calls both right after
+      the sign-in redirect. The offer names its target instead of carrying a random code
+      (0002 amended). Proved by the `identity-link` stage, which runs real ID tokens from
+      a mock issuer and was watched failing on two planted holes. Live on Maincloud only
+      once the module is republished (`deploy.sh remote`)
 - [ ] **M15.3** Anonymous visitors can browse public works and cannot call any writing
       reducer, with a rejection test per reducer. The module's trusted `(issuer, client_id)`
       pairs are build-time configuration (`option_env!`, set by `deploy.sh` per target), so the
-      e2e build trusts a mock issuer and the hosted build only SpacetimeAuth. They cannot be
+      e2e build trusts a mock issuer and the hosted build only SpacetimeAuth. (M15.2 built
+      this: `BOC_TRUSTED_CLIENTS`, `signin::is_signed_in`, and the mock issuer in
+      `client/e2e/support/`. What is left here is applying it to every writing reducer.) They cannot be
       operator-set data, because a module cannot learn its database owner and the hosted
       `init` already ran. "Anonymous" includes SpacetimeAuth's own
       anonymous login, which carries the trusted issuer and client ID (0002). It also reports

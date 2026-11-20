@@ -124,7 +124,9 @@ if [ "$TARGET" = remote ]; then
   # equivalent of `--clear`. Wiping a database that readers are using is not a thing
   # this script should make easy; do it deliberately with the CLI.
   log "publishing module to $REMOTE_SERVER as $REMOTE_DB_NAME"
-  run "cd server && spacetime publish -s '$REMOTE_SERVER' --yes '$REMOTE_DB_NAME'"
+  # `env -u`: the hosted build trusts SpacetimeAuth only (server/src/signin.rs), so a
+  # BOC_TRUSTED_CLIENTS left in someone's shell must not reach it.
+  run "cd server && env -u BOC_TRUSTED_CLIENTS spacetime publish -s '$REMOTE_SERVER' --yes '$REMOTE_DB_NAME'"
 
   if [ "$REMOTE_SEED" = 1 ]; then
     # The seed is idempotent by early-return: it looks for the demo book by title and
@@ -200,8 +202,17 @@ PUBLISH_FLAGS="--server local --yes"
 # --delete-data=always would otherwise stop on.
 [ "$CLEAR" = 1 ] && PUBLISH_FLAGS="$PUBLISH_FLAGS --delete-data=always"
 
+# Which sign-ins the module trusts is fixed at build time (server/src/signin.rs).
+# The hosted build (`remote`, above) sets nothing and trusts SpacetimeAuth only. The
+# local build also trusts the mock issuer `client/e2e/identity-link.spec.ts` runs on
+# 127.0.0.1, because no test can click through a real login page. SpacetimeAuth stays
+# in the list so a developer can still sign in for real against a local server.
+MOCK_ISSUER_CLIENT="http://127.0.0.1:3200|boc-e2e"
+SPACETIMEAUTH_CLIENT="https://auth.spacetimedb.com/oidc|client_0350We80wbokeNK7YI9r5X"
+TRUSTED_CLIENTS="${BOC_TRUSTED_CLIENTS:-$MOCK_ISSUER_CLIENT;$SPACETIMEAUTH_CLIENT}"
+
 log "publishing module as $DB_NAME"
-run "cd server && spacetime publish $PUBLISH_FLAGS $DB_NAME"
+run "cd server && BOC_TRUSTED_CLIENTS='$TRUSTED_CLIENTS' spacetime publish $PUBLISH_FLAGS $DB_NAME"
 
 # Bindings are committed, but a schema change with stale bindings produces a client
 # that type-checks against a module that no longer exists. Regenerating here keeps

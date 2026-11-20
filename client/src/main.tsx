@@ -2,8 +2,10 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { SpacetimeDBProvider } from 'spacetimedb/react';
 import { App } from './App';
+import { carryOver, shouldCarryOver } from './spacetime/carryOver';
 import { buildConnection } from './spacetime/connect';
 import { SessionContext, signIn, signOut, startSession } from './spacetime/session';
+import { loadToken } from './spacetime/token';
 import './index.css';
 
 const root = document.getElementById('root');
@@ -16,7 +18,13 @@ if (!root) {
 // The session is settled before the first render: a sign-in redirect has to finish,
 // and the stored sign-in has to be read (and renewed if it expired), before we know
 // which token to connect with.
-void startSession().then(({ session, keeper }) => {
+void startSession().then(async ({ session, keeper, justSignedIn }) => {
+  // Before the app connects, so its first subscription already sees the rows carried
+  // over from this browser's anonymous identity (M15.2).
+  const anonymousToken = loadToken();
+  if (shouldCarryOver(justSignedIn, session.signedIn, anonymousToken) && session.token) {
+    await carryOver(anonymousToken, session.token);
+  }
   const controls = {
     ...session,
     signIn: () => void signIn(),

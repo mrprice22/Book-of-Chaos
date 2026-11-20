@@ -85,6 +85,21 @@ caller. So:
 3. `complete_link` requires a trusted signed-in caller with no username of its own, and a
    fresh, unused code. Then it moves the row and burns the code.
 
+**Amended by M15.2 (2026-11-20): the offer names its target, and there is no code.** The
+code above came from `ctx.random`. Nothing read for this record shows that `ctx.random`
+is fit for secrets, and a module's randomness is built for deterministic execution. That
+was not checked further, because the design does not need a secret at all. A guessed code
+would let any signed-in stranger with no rows of their own take a username and its
+books. The browser
+learns the signed-in identity as soon as it connects with the ID token, so
+`begin_link(target)` records *who* the offer is for, and `complete_link(from)` takes it
+only when the caller is that target. Each end is proved by the token it connected with,
+so there is nothing to guess, and the private table and the view of the code are gone.
+`client/e2e/identity-link.spec.ts` (the `identity-link` stage) proves it against real ID
+tokens from a mock issuer. Both of these were watched failing, one test each: trusting a
+second issuer let it take a username, and dropping the `email_verified` check let the
+anonymous-login shape take one.
+
 The spike moves only `users`. **The real module has four identity-keyed tables:**
 `users.identity`, `books.owner`, `reader_progress.identity` and `quiz_attempts.identity`.
 A link that moved only the username would leave a returning author locked out of their own

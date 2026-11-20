@@ -11,3 +11,4 @@ crate-type = ["cdylib", "rlib"]
 spacetimedb = "2.8.*"
 log = "0.4"
 ammonia = "4"
+serde_json = "1"

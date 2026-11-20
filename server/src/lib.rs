@@ -8,6 +8,7 @@
 
 pub mod rules;
 pub mod sanitize;
+pub mod signin;
 pub mod unlock;
 
 use spacetimedb::{Identity, ReducerContext, SpacetimeType, Table, Timestamp};
@@ -315,6 +316,24 @@ pub struct QuizAnswerKey {
     pub question_id: u64,
 }
 
+/// An anonymous identity's offer to hand its rows to a signed-in one (M15.2).
+///
+/// Private, and holding no secret. The offer names both ends: `begin_link` records
+/// that the *caller* offers itself to `to_identity`, and `complete_link` takes it only
+/// when *its* caller is `to_identity`. Each end is proved by the token it connected
+/// with, so nothing here has to be guessed or kept secret. Decision 0002's spike used a
+/// random one-time code from `ctx.random` instead. Nothing shows that is fit for
+/// secrets, and naming the target removes the need for one.
+///
+/// One offer per offering identity: a second `begin_link` replaces the first.
+#[spacetimedb::table(accessor = link_requests)]
+pub struct LinkRequest {
+    #[primary_key]
+    pub from_identity: Identity,
+    pub to_identity: Identity,
+    pub created_at: Timestamp,
+}
+
 // ---------------------------------------------------------------------------
 // Lifecycle reducers
 // ---------------------------------------------------------------------------
@@ -360,6 +379,120 @@ pub fn claim_username(ctx: &ReducerContext, username: String) -> Result<(), Stri
         username,
         created_at: ctx.timestamp,
     });
+    Ok(())
+}
+
+/// Is the caller signed in by this module's rule? See `signin` for what that means.
+fn caller_signed_in(ctx: &ReducerContext) -> bool {
+    ctx.sender_auth().jwt().is_some_and(|jwt| {
+        signin::is_signed_in(
+            jwt.issuer(),
+            jwt.audience(),
+            jwt.raw_payload(),
+            signin::trusted_clients(),
+        )
+    })
+}
+
+/// Step one of carrying a username over (decision 0002): the **anonymous** identity
+/// offers its rows to `target`, the signed-in identity the same browser just signed
+/// in as. The browser still holds the anonymous token when the sign-in redirect
+/// returns, so it can make this call with one connection and `complete_link` with the
+/// other.
+#[spacetimedb::reducer]
+pub fn begin_link(ctx: &ReducerContext, target: Identity) -> Result<(), String> {
+    let caller = ctx.sender();
+    rules::can_begin_link(
+        caller_signed_in(ctx),
+        ctx.db.users().identity().find(caller).is_some(),
+        target == caller,
+    )?;
+
+    ctx.db.link_requests().from_identity().delete(caller);
+    ctx.db.link_requests().insert(LinkRequest {
+        from_identity: caller,
+        to_identity: target,
+        created_at: ctx.timestamp,
+    });
+    Ok(())
+}
+
+/// Step two: the signed-in caller takes the offer `from` made to it.
+///
+/// Every identity-keyed row moves, in this one transaction: the username, the books
+/// it owns, its reading progress and its quiz attempts. A link that moved only the
+/// username would leave a returning author locked out of their own books. The offer
+/// is consumed, so it cannot be taken twice.
+#[spacetimedb::reducer]
+pub fn complete_link(ctx: &ReducerContext, from: Identity) -> Result<(), String> {
+    let caller = ctx.sender();
+    let caller_has_rows = ctx.db.users().identity().find(caller).is_some()
+        || ctx.db.books().owner().filter(caller).next().is_some()
+        || ctx
+            .db
+            .reader_progress()
+            .identity()
+            .filter(caller)
+            .next()
+            .is_some()
+        || ctx
+            .db
+            .quiz_attempts()
+            .identity()
+            .filter(caller)
+            .next()
+            .is_some();
+    let offer = ctx
+        .db
+        .link_requests()
+        .from_identity()
+        .find(from)
+        .filter(|offer| offer.to_identity == caller);
+    let source = ctx.db.users().identity().find(from);
+
+    rules::can_complete_link(
+        caller_signed_in(ctx),
+        caller_has_rows,
+        offer.as_ref().map(|offer| rules::LinkFacts {
+            age_micros: ctx.timestamp.to_micros_since_unix_epoch()
+                - offer.created_at.to_micros_since_unix_epoch(),
+            source_has_username: source.is_some(),
+        }),
+    )?;
+    let source = source.ok_or("The username to carry over no longer exists.")?;
+
+    ctx.db.link_requests().from_identity().delete(from);
+
+    ctx.db.users().identity().delete(from);
+    ctx.db.users().insert(User {
+        identity: caller,
+        ..source
+    });
+
+    let books: Vec<Book> = ctx.db.books().owner().filter(from).collect();
+    for book in books {
+        ctx.db.books().book_id().update(Book {
+            owner: caller,
+            ..book
+        });
+    }
+    let progress: Vec<ReaderProgress> = ctx.db.reader_progress().identity().filter(from).collect();
+    for row in progress {
+        ctx.db
+            .reader_progress()
+            .progress_id()
+            .update(ReaderProgress {
+                identity: caller,
+                ..row
+            });
+    }
+    let attempts: Vec<QuizAttempt> = ctx.db.quiz_attempts().identity().filter(from).collect();
+    for row in attempts {
+        ctx.db.quiz_attempts().attempt_id().update(QuizAttempt {
+            identity: caller,
+            ..row
+        });
+    }
     Ok(())
 }
 

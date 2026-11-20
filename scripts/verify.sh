@@ -174,6 +174,12 @@ stage "answer-key"    "client/e2e/answer-key.spec.ts" \
 stage "quiz-gate"     "client/e2e/quiz-gate.spec.ts" \
   "cd client && npm run --silent test:e2e -- --project=quiz-gate"
 
+# The only check that runs real ID tokens through the module's sign-in rule: a valid
+# token from an issuer nobody chose, or SpacetimeAuth's anonymous-login shape, must not
+# take someone's username and books through `complete_link` (M15.2).
+stage "identity-link" "client/e2e/identity-link.spec.ts" \
+  "cd client && npm run --silent test:e2e -- --project=identity-link"
+
 # --- Verdict ----------------------------------------------------------------
 [ "$LIST_ONLY" = 1 ] && exit 0
 

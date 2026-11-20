@@ -84,6 +84,8 @@ export interface StartedSession {
   readonly session: Session;
   /** Present only when signed in: renews the ID token for as long as the page lives. */
   readonly keeper: SignInKeeper | undefined;
+  /** This load finished a sign-in redirect: the moment to carry an anonymous identity over. */
+  readonly justSignedIn: boolean;
 }
 
 /** The keeper's view of the world: the real clock, timers, store and provider. */
@@ -110,11 +112,13 @@ function browserDeps() {
  */
 export async function startSession(): Promise<StartedSession> {
   let signIn: StoredSignIn | null = null;
+  let justSignedIn = false;
   const deps = browserDeps();
   try {
     if (isSignInCallback(window.location.search)) {
       try {
         const user = await userManager().signinRedirectCallback();
+        justSignedIn = true;
         window.history.replaceState(null, '', returnPath(user.state));
       } catch (error) {
         console.warn('Sign-in did not complete:', error);
@@ -132,7 +136,7 @@ export async function startSession(): Promise<StartedSession> {
   const session = chooseSession(signIn, loadToken(), deps.now() / 1000);
   const keeper =
     session.signedIn && signIn ? createSignInKeeper(signIn, deps) : undefined;
-  return { session, keeper };
+  return { session, keeper, justSignedIn };
 }
 
 export function signIn(): Promise<void> {
