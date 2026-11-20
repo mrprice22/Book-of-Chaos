@@ -126,10 +126,16 @@ one.
 
 ## Not measured
 
-- **`login_method` is the anonymous marker, half confirmed.** A real magic-link ID token
-  (2026-11-20, M15.1's live test) carries `login_method: "magic_link"`, alongside
-  `sub`/`provider_id` (a SpacetimeAuth user id), `project_id`, `email`, `email_verified`, and
-  `aud` = the client id. The anonymous login's value has not been read yet.
+- **`login_method` is *not* the anonymous marker. `email_verified` is.** This record said
+  `login_method` would tell the two apart. Both real tokens read on 2026-11-20 carry
+  `login_method: "magic_link"`, the magic-link sign-in *and* SpacetimeAuth's anonymous
+  login. What differs: the magic-link token has `email` and `email_verified: true`, and the
+  anonymous one has neither, plus `name: "Anonymous User"`. So the module's rule is that
+  **signed in = trusted `iss`, our `aud`, and `email_verified == true`**. Matching on the
+  name would break the day SpacetimeAuth rewords it. If another login method is enabled
+  later (GitHub, say), check its token for `email_verified` before relying on this rule.
+  The anonymous login reporting `magic_link` looks like a SpacetimeAuth bug and may be
+  fixed, so nothing here depends on that value either way.
 - **ID tokens last 15 minutes** (`exp − iat = 900` on that token). A durable identity is not
   a durable session, so M15.4 adds renewal. A refresh token **is** issued when the client
   asks for `offline_access`: the stored sign-in held one on the human's check, 2026-11-20.

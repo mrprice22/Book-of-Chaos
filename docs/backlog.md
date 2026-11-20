@@ -549,7 +549,8 @@ M16–M19 below are amended where a record changed their shape.
       Verified 2026-11-20 by the human on `https://book-of-chaos.com`. A magic-link sign-in
       was identity `c2002672…cd650`, and a private window signing in with the same email was
       the same identity. The ID token's claims: `login_method: "magic_link"`, `sub` =
-      `provider_id` = a SpacetimeAuth user id, `email_verified`, and a **900-second lifetime**
+      `provider_id` = a SpacetimeAuth user id, `email_verified`, and a **900-second lifetime**.
+      The anonymous login's token says `magic_link` too, with no email (see M15.3)
 - [ ] **M15.4** Keep a sign-in alive past its 15-minute ID token (found by M15.1). Renew
       with the refresh token: SpacetimeAuth does issue one for `offline_access` (the human's
       console check on 2026-11-20 showed `refresh: true`). When a page loads with an expired ID token, renew before
@@ -565,7 +566,9 @@ M16–M19 below are amended where a record changed their shape.
       e2e build trusts a mock issuer and the hosted build only SpacetimeAuth. They cannot be
       operator-set data, because a module cannot learn its database owner and the hosted
       `init` already ran. "Anonymous" includes SpacetimeAuth's own
-      anonymous login, which carries the trusted issuer and client ID (0002). Per the scope's
+      anonymous login, which carries the trusted issuer and client ID (0002). It also reports
+      `login_method: "magic_link"`, so the signed-in test is `email_verified == true`, never
+      `login_method` (both real tokens were read 2026-11-20). Per the scope's
       second 2026-11-19 amendment, an anonymous reader is **read-only** and sees only the
       books whose owner enabled anonymous access. That is enforced by the server, through a
       caller-aware view over private book tables (0001), and proved by a live test that an
