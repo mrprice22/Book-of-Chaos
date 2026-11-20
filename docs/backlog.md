@@ -808,3 +808,14 @@ them.** The three v0.1 entries that used to live here became M9.
   every private table here, `quiz_answer_key` included, and v0.3 asks for no more. If a
   later release must exclude the operator too, the design is the one M14.1 did not need: the
   worker encrypts before upload, and the server never holds the key.
+
+- **The local gate needs the internet on a machine whose CLI is logged in.** Since M13.1's
+  `spacetime login`, the CLI's token is issued by `https://auth.spacetimedb.com`. Every
+  local `spacetime publish` therefore makes the *local* server fetch that issuer's public
+  key, and when the fetch fails the publish fails too: `Pre-publish check failed with status
+  401 Unauthorized: Error fetching public key for issuer https://auth.spacetimedb.com`.
+  It happened once on 2026-11-19, in `auth-reject` only, and was green on rerun. CI is not
+  affected, because its CLI is anonymous. The fix, if it recurs: publish locally with
+  `--anonymous`, or with a local-only identity, so the dev database is not owned by the web
+  login. That is the same ownership trap the resolved M13.1 entry describes, so move the
+  data dir aside when switching.
