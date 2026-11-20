@@ -573,6 +573,14 @@ M16–M19 below are amended where a record changed their shape.
       readers. Fixed to carry any identity-keyed row (`2c73d8a`) and republished. Verified
       2026-11-20 by the human: a book created anonymously in a private window was still in
       the author list after signing in with a new email
+- [~] **M15.5** Choose an account when signing in (asked for by the human, 2026-11-20).
+      After signing out, "Sign in" logged straight back in, because SpacetimeAuth keeps its own
+      session. Signed out with a remembered account, the reader offers "Continue as <email>"
+      (the provider's session, with `login_hint`) and "Use another account" (`prompt=login`,
+      which forces the email page). SpacetimeAuth refuses `prompt=select_account`, checked
+      against its authorize endpoint. The email is remembered only in this browser, and only
+      from a verified sign-in. Unit tests, plus a human check that "Use another account" asks
+      for an email
 - [ ] **M15.3** Anonymous visitors can browse public works and cannot call any writing
       reducer, with a rejection test per reducer. The module's trusted `(issuer, client_id)`
       pairs are build-time configuration (`option_env!`, set by `deploy.sh` per target), so the

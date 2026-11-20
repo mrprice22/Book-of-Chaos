@@ -19,7 +19,7 @@ export function t(key: MessageKey, params?: MessageParams): string {
   return params ? interpolate(message, params) : message;
 }
 
-/** Exported for its own tests; no key in `en-US.ts` takes a placeholder yet. */
+/** Exported for its own tests. */
 export function interpolate(message: string, params: MessageParams): string {
   return message.replace(/\{(\w+)\}/g, (match, name: string) => {
     const value = params[name];

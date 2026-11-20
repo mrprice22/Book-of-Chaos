@@ -121,17 +121,53 @@ describe('App', () => {
 
     it('offers sign-in to an anonymous reader, and starts it on click', async () => {
       const signIn = vi.fn();
-      withSession({ token: 'anon', signedIn: false, signIn, signOut: vi.fn() });
+      withSession({
+        token: 'anon',
+        signedIn: false,
+        lastAccount: undefined,
+        signIn,
+        signOut: vi.fn(),
+      });
       expect(screen.getByText('Browsing anonymously')).toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: /Continue as/ }),
+      ).not.toBeInTheDocument();
       await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
-      expect(signIn).toHaveBeenCalledOnce();
+      expect(signIn).toHaveBeenCalledExactlyOnceWith('continue');
+    });
+
+    it('offers the remembered account or another one to a signed-out reader', async () => {
+      const signIn = vi.fn();
+      withSession({
+        token: 'anon',
+        signedIn: false,
+        lastAccount: 'ada@example.com',
+        signIn,
+        signOut: vi.fn(),
+      });
+      expect(screen.queryByRole('button', { name: 'Sign in' })).not.toBeInTheDocument();
+      await userEvent.click(
+        screen.getByRole('button', { name: 'Continue as ada@example.com' }),
+      );
+      expect(signIn).toHaveBeenLastCalledWith('continue');
+      await userEvent.click(screen.getByRole('button', { name: 'Use another account' }));
+      expect(signIn).toHaveBeenLastCalledWith('another');
     });
 
     it('offers sign-out to a signed-in reader, and starts it on click', async () => {
       const signOut = vi.fn();
-      withSession({ token: 'id', signedIn: true, signIn: vi.fn(), signOut });
+      withSession({
+        token: 'id',
+        signedIn: true,
+        lastAccount: 'ada@example.com',
+        signIn: vi.fn(),
+        signOut,
+      });
       expect(screen.getByText('Signed in')).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Sign in' })).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole('button', { name: /Continue as/ }),
+      ).not.toBeInTheDocument();
       await userEvent.click(screen.getByRole('button', { name: 'Sign out' }));
       expect(signOut).toHaveBeenCalledOnce();
     });
@@ -141,6 +177,7 @@ describe('App', () => {
       withSession({
         token: undefined,
         signedIn: false,
+        lastAccount: undefined,
         signIn: vi.fn(),
         signOut: vi.fn(),
       });

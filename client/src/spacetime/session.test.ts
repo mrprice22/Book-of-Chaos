@@ -1,5 +1,5 @@
 import { jwt } from './jwt.fixture';
-import { chooseSession, isSignInCallback, returnPath } from './session';
+import { chooseSession, isSignInCallback, returnPath, signInRequest } from './session';
 
 const NOW_S = 1_800_000_000;
 
@@ -86,5 +86,21 @@ describe('returnPath', () => {
     expect(returnPath('https://evil.example/')).toBe('/');
     expect(returnPath(undefined)).toBe('/');
     expect(returnPath(42)).toBe('/');
+  });
+});
+
+describe('signInRequest', () => {
+  it('makes the provider ask for an email when the reader wants another account', () => {
+    expect(signInRequest('another', 'ada@example.com')).toEqual({ prompt: 'login' });
+  });
+
+  it('continues with the remembered account, naming it as a hint', () => {
+    expect(signInRequest('continue', 'ada@example.com')).toEqual({
+      login_hint: 'ada@example.com',
+    });
+  });
+
+  it('is a plain sign-in with nothing remembered', () => {
+    expect(signInRequest('continue', undefined)).toEqual({});
   });
 });
