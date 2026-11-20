@@ -13,8 +13,8 @@ import { SPACETIME_DB_NAME, SPACETIME_URI } from './config';
 /** Give up on the carry-over after this long, so a dead network cannot hold the page. */
 export const CARRY_OVER_TIMEOUT_MS = 10_000;
 
-/** The refusal the server gives an anonymous reader who never claimed a username. */
-const NOTHING_TO_CARRY = 'no username to carry over';
+/** The refusal the server gives an anonymous reader with no books, progress or username. */
+const NOTHING_TO_CARRY = 'nothing to carry over';
 
 /**
  * Pure: is this page load the moment to carry over? Only right after a sign-in
@@ -62,8 +62,8 @@ function timeout(ms: number): Promise<never> {
  *
  * Never throws: a carry-over that fails leaves the reader signed in with a fresh
  * account, which is a working state. The rows stay with the anonymous identity, so
- * nothing is lost. The common refusal, an anonymous reader with no username to
- * carry, is expected and stays quiet. Anything else is logged.
+ * nothing is lost. The common refusal, an anonymous reader with nothing to carry,
+ * is expected and stays quiet. Anything else is logged.
  */
 export async function carryOver(anonymousToken: string, idToken: string): Promise<void> {
   const opened: DbConnection[] = [];
@@ -77,8 +77,7 @@ export async function carryOver(anonymousToken: string, idToken: string): Promis
     await Promise.race([attempt(), timeout(CARRY_OVER_TIMEOUT_MS)]);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (!isNothingToCarry(message))
-      console.warn('Username carry-over did not happen:', message);
+    if (!isNothingToCarry(message)) console.warn('Carry-over did not happen:', message);
   } finally {
     for (const conn of opened) conn.disconnect();
   }

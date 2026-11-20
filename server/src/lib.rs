@@ -394,7 +394,28 @@ fn caller_signed_in(ctx: &ReducerContext) -> bool {
     })
 }
 
-/// Step one of carrying a username over (decision 0002): the **anonymous** identity
+/// Does `identity` hold a row in any identity-keyed table? These four are every
+/// table keyed by identity, and `complete_link` moves all of them.
+fn has_identity_rows(ctx: &ReducerContext, identity: Identity) -> bool {
+    ctx.db.users().identity().find(identity).is_some()
+        || ctx.db.books().owner().filter(identity).next().is_some()
+        || ctx
+            .db
+            .reader_progress()
+            .identity()
+            .filter(identity)
+            .next()
+            .is_some()
+        || ctx
+            .db
+            .quiz_attempts()
+            .identity()
+            .filter(identity)
+            .next()
+            .is_some()
+}
+
+/// Step one of carrying an anonymous identity over (decision 0002): the **anonymous** identity
 /// offers its rows to `target`, the signed-in identity the same browser just signed
 /// in as. The browser still holds the anonymous token when the sign-in redirect
 /// returns, so it can make this call with one connection and `complete_link` with the
@@ -404,7 +425,7 @@ pub fn begin_link(ctx: &ReducerContext, target: Identity) -> Result<(), String> 
     let caller = ctx.sender();
     rules::can_begin_link(
         caller_signed_in(ctx),
-        ctx.db.users().identity().find(caller).is_some(),
+        has_identity_rows(ctx, caller),
         target == caller,
     )?;
 
@@ -426,29 +447,14 @@ pub fn begin_link(ctx: &ReducerContext, target: Identity) -> Result<(), String> 
 #[spacetimedb::reducer]
 pub fn complete_link(ctx: &ReducerContext, from: Identity) -> Result<(), String> {
     let caller = ctx.sender();
-    let caller_has_rows = ctx.db.users().identity().find(caller).is_some()
-        || ctx.db.books().owner().filter(caller).next().is_some()
-        || ctx
-            .db
-            .reader_progress()
-            .identity()
-            .filter(caller)
-            .next()
-            .is_some()
-        || ctx
-            .db
-            .quiz_attempts()
-            .identity()
-            .filter(caller)
-            .next()
-            .is_some();
+    let caller_has_rows = has_identity_rows(ctx, caller);
     let offer = ctx
         .db
         .link_requests()
         .from_identity()
         .find(from)
         .filter(|offer| offer.to_identity == caller);
-    let source = ctx.db.users().identity().find(from);
+    let source_has_rows = has_identity_rows(ctx, from);
 
     rules::can_complete_link(
         caller_signed_in(ctx),
@@ -456,18 +462,20 @@ pub fn complete_link(ctx: &ReducerContext, from: Identity) -> Result<(), String>
         offer.as_ref().map(|offer| rules::LinkFacts {
             age_micros: ctx.timestamp.to_micros_since_unix_epoch()
                 - offer.created_at.to_micros_since_unix_epoch(),
-            source_has_username: source.is_some(),
+            source_has_rows,
         }),
     )?;
-    let source = source.ok_or("The username to carry over no longer exists.")?;
-
     ctx.db.link_requests().from_identity().delete(from);
 
-    ctx.db.users().identity().delete(from);
-    ctx.db.users().insert(User {
-        identity: caller,
-        ..source
-    });
+    // A username is carried when there is one. The reader has no screen that claims
+    // one, so most identities arrive with books and progress and no `users` row.
+    if let Some(user) = ctx.db.users().identity().find(from) {
+        ctx.db.users().identity().delete(from);
+        ctx.db.users().insert(User {
+            identity: caller,
+            ..user
+        });
+    }
 
     let books: Vec<Book> = ctx.db.books().owner().filter(from).collect();
     for book in books {

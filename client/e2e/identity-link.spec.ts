@@ -27,7 +27,7 @@ const CLIENT_ID = 'boc-e2e';
 /** Valid tokens, signed and served properly, from an issuer the module does not trust. */
 const UNTRUSTED_PORT = 3201;
 
-const NOT_SIGNED_IN = 'Sign in before carrying a username over.';
+const NOT_SIGNED_IN = 'Sign in before carrying anything over.';
 
 interface Caller {
   readonly conn: DbConnection;
@@ -228,13 +228,35 @@ test('begin_link is refused for a signed-in caller', async () => {
   expect(refusal).toContain('already signed in');
 });
 
-test('begin_link is refused for an identity with no username', async () => {
+test('an anonymous author with books but no username carries them over', async () => {
+  // The case every real reader is in: the reader has no screen that claims a
+  // username, so what an anonymous author has is books and progress.
+  const anon = await connect();
+  const title = `No username ${run}`;
+  await anon.conn.reducers.createBook({ title, description: 'Owned with no username.' });
+  const book = await waitFor(
+    () => [...observer.conn.db.books.iter()].find((b) => b.title === title),
+    'the book',
+  );
+  expect(rowsOf(anon.identity).users).toEqual([]);
+
+  const reader = await signedIn();
+  await anon.conn.reducers.beginLink({ target: reader.identity });
+  await reader.conn.reducers.completeLink({ from: anon.identity });
+
+  await waitFor(() => rowsOf(reader.identity).books[0], 'the book to change owner');
+  expect(rowsOf(reader.identity).books.map((b) => b.bookId)).toEqual([book.bookId]);
+  expect(rowsOf(reader.identity).users).toEqual([]);
+  expect(rowsOf(anon.identity).books).toEqual([]);
+});
+
+test('begin_link is refused for an identity with nothing to carry', async () => {
   const caller = await connect();
   const target = await signedIn();
   const refusal = await refusalFrom(
     caller.conn.reducers.beginLink({ target: target.identity }),
   );
-  expect(refusal).toContain('no username');
+  expect(refusal).toContain('nothing to carry over');
 });
 
 /**

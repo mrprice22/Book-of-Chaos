@@ -567,8 +567,10 @@ M16–M19 below are amended where a record changed their shape.
       `begin_link(target)` and `complete_link(from)`, and the browser calls both right after
       the sign-in redirect. The offer names its target instead of carrying a random code
       (0002 amended). Proved by the `identity-link` stage, which runs real ID tokens from
-      a mock issuer and was watched failing on two planted holes. Live on Maincloud only
-      once the module is republished (`deploy.sh remote`)
+      a mock issuer and was watched failing on two planted holes. Published to Maincloud
+      2026-11-20. The human's live check then found that the reader has no screen that
+      claims a username, so the first build (which needed one) carried nothing for real
+      readers. Fixed to carry any identity-keyed row
 - [ ] **M15.3** Anonymous visitors can browse public works and cannot call any writing
       reducer, with a rejection test per reducer. The module's trusted `(issuer, client_id)`
       pairs are build-time configuration (`option_env!`, set by `deploy.sh` per target), so the

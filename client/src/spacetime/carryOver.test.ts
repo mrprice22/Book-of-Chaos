@@ -22,13 +22,13 @@ describe('shouldCarryOver', () => {
 });
 
 describe('isNothingToCarry', () => {
-  it('recognises the server refusing an identity that never claimed a username', () => {
+  it('recognises the server refusing an identity with nothing to carry', () => {
     // The exact text of rules::can_begin_link's refusal.
-    expect(isNothingToCarry('This browser has no username to carry over.')).toBe(true);
+    expect(isNothingToCarry('This browser has nothing to carry over.')).toBe(true);
   });
 
   it('does not hide any other refusal', () => {
-    expect(isNothingToCarry('Sign in before carrying a username over.')).toBe(false);
+    expect(isNothingToCarry('Sign in before carrying anything over.')).toBe(false);
     expect(isNothingToCarry('Carry-over timed out after 10000 ms')).toBe(false);
   });
 });

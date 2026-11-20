@@ -86,22 +86,25 @@ pub const LINK_TTL_MICROS: i64 = 10 * 60 * 1_000_000;
 ///
 /// - `caller_signed_in` — the offer comes from the *anonymous* identity. A signed-in
 ///   identity is already durable; there is nothing to carry.
-/// - `caller_has_username` — only an identity with a username has something worth
-///   carrying (decision 0002).
+/// - `caller_has_rows` — the identity holds something to carry: a username, a book,
+///   progress or a quiz attempt. Not a username alone: the reader has no screen that
+///   claims one, so a real anonymous reader's books and progress are what is at stake.
 /// - `target_is_caller` — offering yourself to yourself is a mistake, not a link.
 pub fn can_begin_link(
     caller_signed_in: bool,
-    caller_has_username: bool,
+    caller_has_rows: bool,
     target_is_caller: bool,
 ) -> Result<(), String> {
     if caller_signed_in {
         return Err("You are already signed in, so there is nothing to carry over.".to_string());
     }
-    if !caller_has_username {
-        return Err("This browser has no username to carry over.".to_string());
+    if !caller_has_rows {
+        return Err("This browser has nothing to carry over.".to_string());
     }
     if target_is_caller {
-        return Err("A username cannot be carried over to the identity that holds it.".to_string());
+        return Err(
+            "Nothing can be carried over to the identity that already holds it.".to_string(),
+        );
     }
     Ok(())
 }
@@ -110,8 +113,8 @@ pub fn can_begin_link(
 pub struct LinkFacts {
     /// Microseconds since the offer was made.
     pub age_micros: i64,
-    /// The offering identity still holds a username.
-    pub source_has_username: bool,
+    /// The offering identity still holds something to carry.
+    pub source_has_rows: bool,
 }
 
 /// Decides whether a signed-in identity may take the rows it was offered.
@@ -127,7 +130,7 @@ pub fn can_complete_link(
     link: Option<LinkFacts>,
 ) -> Result<(), String> {
     if !caller_signed_in {
-        return Err("Sign in before carrying a username over.".to_string());
+        return Err("Sign in before carrying anything over.".to_string());
     }
     if caller_has_rows {
         return Err(
@@ -140,8 +143,8 @@ pub fn can_complete_link(
     if !(0..=LINK_TTL_MICROS).contains(&link.age_micros) {
         return Err("That carry-over has expired. Sign in again to retry.".to_string());
     }
-    if !link.source_has_username {
-        return Err("The username to carry over no longer exists.".to_string());
+    if !link.source_has_rows {
+        return Err("There is nothing left to carry over.".to_string());
     }
     Ok(())
 }
@@ -767,12 +770,12 @@ mod tests {
     fn fresh_link() -> Option<LinkFacts> {
         Some(LinkFacts {
             age_micros: 5_000_000,
-            source_has_username: true,
+            source_has_rows: true,
         })
     }
 
     #[test]
-    fn an_anonymous_identity_with_a_username_may_offer_it() {
+    fn an_anonymous_identity_with_rows_may_offer_them() {
         assert!(can_begin_link(false, true, false).is_ok());
     }
 
@@ -786,11 +789,11 @@ mod tests {
     }
 
     #[test]
-    fn an_identity_with_no_username_has_nothing_to_offer() {
+    fn an_identity_with_no_rows_has_nothing_to_offer() {
         assert!(
             can_begin_link(false, false, false)
                 .unwrap_err()
-                .contains("no username")
+                .contains("nothing to carry over")
         );
     }
 
@@ -845,7 +848,7 @@ mod tests {
                 false,
                 Some(LinkFacts {
                     age_micros,
-                    source_has_username: true,
+                    source_has_rows: true,
                 }),
             )
         };
@@ -856,15 +859,15 @@ mod tests {
     }
 
     #[test]
-    fn an_offer_whose_username_is_gone_is_refused() {
+    fn an_offer_with_nothing_left_behind_it_is_refused() {
         let link = Some(LinkFacts {
             age_micros: 0,
-            source_has_username: false,
+            source_has_rows: false,
         });
         assert!(
             can_complete_link(true, false, link)
                 .unwrap_err()
-                .contains("no longer exists")
+                .contains("nothing left")
         );
     }
 

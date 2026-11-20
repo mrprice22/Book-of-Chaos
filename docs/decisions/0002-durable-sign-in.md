@@ -100,6 +100,13 @@ tokens from a mock issuer. Both of these were watched failing, one test each: tr
 second issuer let it take a username, and dropping the `email_verified` check let the
 anonymous-login shape take one.
 
+**Amended again (2026-11-20): anything to carry, not a username.** The spike, and the first
+M15.2 build, refused `begin_link` for an identity with no username. But the reader has no
+screen that claims a username. Only tests and the seed call `claim_username`. So every
+real anonymous reader has books and progress but no `users` row, and that rule refused
+all of them. The human found this in the live check. `begin_link` now needs a row in any
+of the four tables below, and `complete_link` moves the `users` row only when there is one.
+
 The spike moves only `users`. **The real module has four identity-keyed tables:**
 `users.identity`, `books.owner`, `reader_progress.identity` and `quiz_attempts.identity`.
 A link that moved only the username would leave a returning author locked out of their own
