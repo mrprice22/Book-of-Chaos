@@ -91,16 +91,11 @@ describe('returnPath', () => {
 
 describe('signInRequest', () => {
   it('makes the provider ask for an email when the reader wants another account', () => {
-    expect(signInRequest('another', 'ada@example.com')).toEqual({ prompt: 'login' });
+    expect(signInRequest('another')).toEqual({ prompt: 'login' });
   });
 
-  it('continues with the remembered account, naming it as a hint', () => {
-    expect(signInRequest('continue', 'ada@example.com')).toEqual({
-      login_hint: 'ada@example.com',
-    });
-  });
-
-  it('is a plain sign-in with nothing remembered', () => {
-    expect(signInRequest('continue', undefined)).toEqual({});
+  it('adds nothing when continuing, so the provider can reuse its own session', () => {
+    // A login_hint here made SpacetimeAuth ask for an email anyway (human check, M15.5).
+    expect(signInRequest('continue')).toEqual({});
   });
 });

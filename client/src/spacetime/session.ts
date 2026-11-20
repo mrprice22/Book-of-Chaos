@@ -154,29 +154,21 @@ export type SignInChoice = 'continue' | 'another';
 /**
  * Pure: the extra authorization-request parameters for a choice.
  *
- * `prompt=login` is the only `prompt` SpacetimeAuth accepts besides none. It refuses
- * `select_account` (checked against its authorize endpoint, 2026-11-20), so there
- * is no provider-side account picker to hand this to. `login_hint` names the account
- * the reader means. It is accepted, but whether the login page uses it is the
- * provider's business.
+ * `another` sends `prompt=login`, which SpacetimeAuth accepts. It refuses
+ * `select_account` (both checked against its authorize endpoint, 2026-11-20), so
+ * there is no provider-side account picker to hand this to.
+ *
+ * `continue` sends nothing extra, deliberately. The first build sent the remembered
+ * email as `login_hint`, and the human saw SpacetimeAuth ask for an email anyway.
+ * The same request without the hint had signed them straight back in.
  */
-export function signInRequest(
-  choice: SignInChoice,
-  lastAccount: string | undefined,
-): { prompt?: 'login'; login_hint?: string } {
-  if (choice === 'another') return { prompt: 'login' };
-  return lastAccount ? { login_hint: lastAccount } : {};
+export function signInRequest(choice: SignInChoice): { prompt?: 'login' } {
+  return choice === 'another' ? { prompt: 'login' } : {};
 }
 
-export function signIn(
-  choice: SignInChoice,
-  lastAccount: string | undefined,
-): Promise<void> {
+export function signIn(choice: SignInChoice): Promise<void> {
   const here = window.location.pathname + window.location.search;
-  return userManager().signinRedirect({
-    state: here,
-    ...signInRequest(choice, lastAccount),
-  });
+  return userManager().signinRedirect({ state: here, ...signInRequest(choice) });
 }
 
 /**

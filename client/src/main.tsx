@@ -36,7 +36,7 @@ void startSession().then(async ({ session, keeper, justSignedIn }) => {
   const controls = {
     ...session,
     lastAccount,
-    signIn: (choice: SignInChoice) => void signIn(choice, lastAccount),
+    signIn: (choice: SignInChoice) => void signIn(choice),
     signOut: () => void signOut(),
   };
   createRoot(root).render(

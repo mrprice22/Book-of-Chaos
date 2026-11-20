@@ -576,7 +576,8 @@ M16–M19 below are amended where a record changed their shape.
 - [~] **M15.5** Choose an account when signing in (asked for by the human, 2026-11-20).
       After signing out, "Sign in" logged straight back in, because SpacetimeAuth keeps its own
       session. Signed out with a remembered account, the reader offers "Continue as <email>"
-      (the provider's session, with `login_hint`) and "Use another account" (`prompt=login`,
+      (the provider's session, with nothing added: a `login_hint` made SpacetimeAuth ask for
+      an email, found in the human's check) and "Use another account" (`prompt=login`,
       which forces the email page). SpacetimeAuth refuses `prompt=select_account`, checked
       against its authorize endpoint. The email is remembered only in this browser, and only
       from a verified sign-in. Unit tests, plus a human check that "Use another account" asks
