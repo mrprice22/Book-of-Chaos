@@ -145,6 +145,9 @@ one.
 - **ID tokens last 15 minutes** (`exp − iat = 900` on that token). A durable identity is not
   a durable session, so M15.4 adds renewal. A refresh token **is** issued when the client
   asks for `offline_access`: the stored sign-in held one on the human's check, 2026-11-20.
+  Spending it returns a **new ID token**. The human was still signed in after 20 minutes and
+  after a reload past that, and the client counts a refresh without a fresh `exp` as failed
+  (M15.4, verified 2026-11-20).
 - **A real SpacetimeAuth token.** The project exists and its discovery document, client ID
   and redirect URIs were checked (blocked.md, resolved M14.2). But no one has signed in, so
   no real token has been through a module yet. That is M15.1's first live run.
