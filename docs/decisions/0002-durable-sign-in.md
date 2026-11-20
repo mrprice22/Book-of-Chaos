@@ -106,7 +106,13 @@ new identity already owns rows in any of them, and is tested on each.
   too. The rejection test per writing reducer should use one of each.
 - **Expiry.** ID tokens expire (the mock used an hour). The client must refresh, or send the
   user back through sign-in, before reconnecting with a stale token. Otherwise a reconnect
-  fails with 401.
+  fails with 401. M15.4 does it in `client/src/spacetime/renewal.ts`. Expiry is read from
+  the ID token's own `exp`, never from oidc-client-ts's `User.expired`, which follows the
+  access token. A refresh that keeps the old ID token therefore counts as failed. Renewal
+  runs 60 s before `exp`, on page load if the token has already expired, and when a
+  connection drops with an expired token. Each new token goes onto the connection builder,
+  and the SDK rebuilds every reconnect from that builder. A sign-in that cannot be renewed
+  reloads the page, which then settles as anonymous.
 
 ## SpacetimeAuth's own anonymous login
 

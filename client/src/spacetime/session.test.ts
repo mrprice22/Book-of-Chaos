@@ -1,43 +1,56 @@
+import { jwt } from './jwt.fixture';
 import { chooseSession, isSignInCallback, returnPath } from './session';
+
+const NOW_S = 1_800_000_000;
 
 describe('chooseSession', () => {
   it('connects with a live ID token when signed in', () => {
-    expect(chooseSession({ id_token: 'id-tok', expired: false }, 'anon-tok')).toEqual({
-      token: 'id-tok',
+    const live = jwt({ exp: NOW_S + 600 });
+    expect(chooseSession({ id_token: live }, 'anon-tok', NOW_S)).toEqual({
+      token: live,
       signedIn: true,
     });
-  });
-
-  it('treats an unknown expiry as live, as oidc-client-ts reports no expires_at', () => {
-    expect(
-      chooseSession({ id_token: 'id-tok', expired: undefined }, 'anon-tok').signedIn,
-    ).toBe(true);
   });
 
   it('falls back to the anonymous token when the ID token has expired', () => {
     // An expired token would be refused with a 401 and the connection would retry
     // forever; anonymous is the recoverable state.
-    expect(chooseSession({ id_token: 'id-tok', expired: true }, 'anon-tok')).toEqual({
+    expect(
+      chooseSession({ id_token: jwt({ exp: NOW_S - 1 }) }, 'anon-tok', NOW_S),
+    ).toEqual({
       token: 'anon-tok',
       signedIn: false,
     });
   });
 
+  it('judges by the ID token, so a refresh token alone does not sign anyone in', () => {
+    expect(
+      chooseSession(
+        { id_token: jwt({ exp: NOW_S - 1 }), refresh_token: 'r' },
+        'anon',
+        NOW_S,
+      ).signedIn,
+    ).toBe(false);
+  });
+
   it('falls back to the anonymous token with no stored sign-in', () => {
-    expect(chooseSession(null, 'anon-tok')).toEqual({
+    expect(chooseSession(null, 'anon-tok', NOW_S)).toEqual({
       token: 'anon-tok',
       signedIn: false,
     });
   });
 
   it('asks for a fresh identity when there is neither', () => {
-    expect(chooseSession(null, undefined)).toEqual({ token: undefined, signedIn: false });
+    expect(chooseSession(null, undefined, NOW_S)).toEqual({
+      token: undefined,
+      signedIn: false,
+    });
   });
 
   it('is not signed in when the stored sign-in carries no ID token', () => {
-    expect(
-      chooseSession({ id_token: undefined, expired: false }, 'anon-tok').signedIn,
-    ).toBe(false);
+    expect(chooseSession({ id_token: undefined }, 'anon-tok', NOW_S).signedIn).toBe(
+      false,
+    );
   });
 });
 

@@ -10,9 +10,18 @@
 // `oidc-client-ts` does the redirect flow (PKCE, state and nonce checks).
 
 import { createContext, useContext } from 'react';
-import { UserManager, WebStorageStateStore, type User } from 'oidc-client-ts';
+import { UserManager, WebStorageStateStore } from 'oidc-client-ts';
 import { SPACETIMEAUTH_AUTHORITY, SPACETIMEAUTH_CLIENT_ID } from './config';
 import { loadToken } from './token';
+import {
+  createSignInKeeper,
+  isLive,
+  renewSignIn,
+  type SignInKeeper,
+  type StoredSignIn,
+} from './renewal';
+
+export type { StoredSignIn } from './renewal';
 
 export interface Session {
   /** The token the connection opens with. `undefined` asks SpacetimeDB for a new identity. */
@@ -20,21 +29,19 @@ export interface Session {
   readonly signedIn: boolean;
 }
 
-/** The ID token's fields this module reads. A narrow shape so tests need no real `User`. */
-export type StoredSignIn = Pick<User, 'id_token' | 'expired'>;
-
 /**
  * Pure: which token to connect with.
  *
  * An expired ID token is not used. SpacetimeDB would refuse it with a 401 and the
  * connection would retry forever, so the reader falls back to anonymous and is
- * offered "Sign in" again.
+ * offered "Sign in" again. `startSession` tries a renewal before it gets here.
  */
 export function chooseSession(
   signIn: StoredSignIn | null,
   anonymousToken: string | undefined,
+  nowS: number,
 ): Session {
-  if (signIn?.id_token && signIn.expired !== true) {
+  if (isLive(signIn, nowS) && signIn.id_token) {
     return { token: signIn.id_token, signedIn: true };
   }
   return { token: anonymousToken, signedIn: false };
@@ -66,21 +73,44 @@ function userManager(): UserManager {
     // offline_access asks for a refresh token, so a sign-in can outlive its ID token.
     scope: 'openid profile email offline_access',
     userStore: new WebStorageStateStore({ store: window.localStorage }),
-    automaticSilentRenew: true,
+    // Off: it times renewal by the access token's expiry, not the ID token's. This
+    // module schedules renewal itself, from the ID token's `exp` (`createSignInKeeper`).
+    automaticSilentRenew: false,
   });
   return manager;
 }
 
+export interface StartedSession {
+  readonly session: Session;
+  /** Present only when signed in: renews the ID token for as long as the page lives. */
+  readonly keeper: SignInKeeper | undefined;
+}
+
+/** The keeper's view of the world: the real clock, timers, store and provider. */
+function browserDeps() {
+  return {
+    now: () => Date.now(),
+    load: () => userManager().getUser(),
+    refresh: () => userManager().signinSilent(),
+    setTimer: (fn: () => void, ms: number) => {
+      const id = window.setTimeout(fn, ms);
+      return () => window.clearTimeout(id);
+    },
+  };
+}
+
 /**
  * Resolve the session before the app renders: finish a sign-in redirect if this is
- * one, then read whatever sign-in is stored.
+ * one, then read whatever sign-in is stored, renewing it if its ID token has expired.
+ * Only when that renewal fails does the reader fall back to anonymous.
  *
  * A failed callback (a stale or replayed `state`, or the reader cancelling at the
  * provider) is not fatal. The reader simply stays anonymous. Either way the
  * `code`/`state` query is removed, so a reload does not replay it.
  */
-export async function startSession(): Promise<Session> {
+export async function startSession(): Promise<StartedSession> {
   let signIn: StoredSignIn | null = null;
+  const deps = browserDeps();
   try {
     if (isSignInCallback(window.location.search)) {
       try {
@@ -92,11 +122,17 @@ export async function startSession(): Promise<Session> {
       }
     }
     signIn = await userManager().getUser();
+    if (signIn && !isLive(signIn, deps.now() / 1000)) {
+      signIn = await renewSignIn(deps);
+    }
   } catch (error) {
     // Storage blocked, or the provider unreachable: browse anonymously.
     console.warn('Could not read the stored sign-in:', error);
   }
-  return chooseSession(signIn, loadToken());
+  const session = chooseSession(signIn, loadToken(), deps.now() / 1000);
+  const keeper =
+    session.signedIn && signIn ? createSignInKeeper(signIn, deps) : undefined;
+  return { session, keeper };
 }
 
 export function signIn(): Promise<void> {

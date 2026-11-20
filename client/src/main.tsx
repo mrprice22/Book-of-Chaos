@@ -14,8 +14,9 @@ if (!root) {
 }
 
 // The session is settled before the first render: a sign-in redirect has to finish,
-// and the stored sign-in has to be read, before we know which token to connect with.
-void startSession().then((session) => {
+// and the stored sign-in has to be read (and renewed if it expired), before we know
+// which token to connect with.
+void startSession().then(({ session, keeper }) => {
   const controls = {
     ...session,
     signIn: () => void signIn(),
@@ -24,7 +25,7 @@ void startSession().then((session) => {
   createRoot(root).render(
     <StrictMode>
       <SessionContext.Provider value={controls}>
-        <SpacetimeDBProvider connectionBuilder={buildConnection(session)}>
+        <SpacetimeDBProvider connectionBuilder={buildConnection(session, keeper)}>
           <App />
         </SpacetimeDBProvider>
       </SessionContext.Provider>

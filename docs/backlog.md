@@ -551,12 +551,16 @@ M16–M19 below are amended where a record changed their shape.
       the same identity. The ID token's claims: `login_method: "magic_link"`, `sub` =
       `provider_id` = a SpacetimeAuth user id, `email_verified`, and a **900-second lifetime**.
       The anonymous login's token says `magic_link` too, with no email (see M15.3)
-- [ ] **M15.4** Keep a sign-in alive past its 15-minute ID token (found by M15.1). Renew
+- [~] **M15.4** Keep a sign-in alive past its 15-minute ID token (found by M15.1). Renew
       with the refresh token: SpacetimeAuth does issue one for `offline_access` (the human's
       console check on 2026-11-20 showed `refresh: true`). When a page loads with an expired ID token, renew before
       falling back to anonymous. A reconnect opens with the current token, not the one the
       page loaded with. Unit tests on the pure parts, plus a human check that a reader is
       still signed in after 20 minutes and after a reload
+      Built and unit-tested in `client/src/spacetime/renewal.ts`; awaiting the human check
+      on `https://book-of-chaos.com`. That check also shows whether SpacetimeAuth's refresh
+      response carries a new ID token. If it does not, renewal fails and the reader
+      falls back to anonymous
 - [ ] **M15.2** Existing `users` rows keep their username through the switch, by 0002's
       two-step link. It moves every identity-keyed row (`users`, `books.owner`,
       `reader_progress`, `quiz_attempts`), not only the username
