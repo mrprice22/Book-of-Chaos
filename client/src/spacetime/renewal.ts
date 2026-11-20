@@ -26,6 +26,21 @@ export const RENEW_AHEAD_S = 60;
 /** After a failed renewal, try again this soon (bounded by the token's own expiry). */
 export const RENEW_RETRY_MS = 15_000;
 
+/** Pure: the ID token's claims, or `undefined` if its payload cannot be read. */
+function idTokenClaims(idToken: string): Record<string, unknown> | undefined {
+  const payload = idToken.split('.')[1];
+  if (!payload) return undefined;
+  try {
+    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const claims: unknown = JSON.parse(atob(base64));
+    return typeof claims === 'object' && claims !== null
+      ? (claims as Record<string, unknown>)
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Pure: the ID token's own `exp`, in epoch seconds, or `undefined` if it cannot be read.
  *
@@ -35,17 +50,20 @@ export const RENEW_RETRY_MS = 15_000;
  * catches a refresh that returned no new ID token: the old one keeps its old `exp`.
  */
 export function idTokenExpiry(idToken: string): number | undefined {
-  const payload = idToken.split('.')[1];
-  if (!payload) return undefined;
-  try {
-    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
-    const claims: unknown = JSON.parse(atob(base64));
-    if (typeof claims !== 'object' || claims === null || !('exp' in claims))
-      return undefined;
-    return typeof claims.exp === 'number' ? claims.exp : undefined;
-  } catch {
-    return undefined;
-  }
+  const exp = idTokenClaims(idToken)?.exp;
+  return typeof exp === 'number' ? exp : undefined;
+}
+
+/**
+ * Pure: does this ID token carry `email_verified: true`?
+ *
+ * That claim, and nothing else, is what the server calls signed in
+ * (`server/src/signin.rs`). SpacetimeAuth's own anonymous login issues a live ID token
+ * from the trusted issuer too, and it says `login_method: "magic_link"`, so neither the
+ * token's presence nor its login method can decide.
+ */
+export function isVerified(idToken: string): boolean {
+  return idTokenClaims(idToken)?.email_verified === true;
 }
 
 /** Pure: can this ID token still open a connection at `nowS` (epoch seconds)? */

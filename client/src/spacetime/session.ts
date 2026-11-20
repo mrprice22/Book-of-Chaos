@@ -16,6 +16,7 @@ import { loadToken } from './token';
 import {
   createSignInKeeper,
   isLive,
+  isVerified,
   renewSignIn,
   type SignInKeeper,
   type StoredSignIn,
@@ -35,13 +36,17 @@ export interface Session {
  * An expired ID token is not used. SpacetimeDB would refuse it with a 401 and the
  * connection would retry forever, so the reader falls back to anonymous and is
  * offered "Sign in" again. `startSession` tries a renewal before it gets here.
+ *
+ * A live ID token without a verified email is SpacetimeAuth's anonymous login. The
+ * server treats it as anonymous (M15.3), so the client does too: it is not used, and
+ * "Sign in" is offered, which leads to the provider's email sign-in.
  */
 export function chooseSession(
   signIn: StoredSignIn | null,
   anonymousToken: string | undefined,
   nowS: number,
 ): Session {
-  if (isLive(signIn, nowS) && signIn.id_token) {
+  if (isLive(signIn, nowS) && signIn.id_token && isVerified(signIn.id_token)) {
     return { token: signIn.id_token, signedIn: true };
   }
   return { token: anonymousToken, signedIn: false };

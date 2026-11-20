@@ -581,7 +581,7 @@ M16–M19 below are amended where a record changed their shape.
       page. SpacetimeAuth's `/login.js` never reads the hint, and it refuses
       `prompt=select_account`. With no one-click path, the second button promised what it
       could not do. The one earlier sign-in that skipped the email page was not seen again
-- [ ] **M15.3** Anonymous visitors can browse public works and cannot call any writing
+- [~] **M15.3** Anonymous visitors can browse public works and cannot call any writing
       reducer, with a rejection test per reducer. The module's trusted `(issuer, client_id)`
       pairs are build-time configuration (`option_env!`, set by `deploy.sh` per target), so the
       e2e build trusts a mock issuer and the hosted build only SpacetimeAuth. (M15.2 built

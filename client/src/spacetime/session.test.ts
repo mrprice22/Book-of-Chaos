@@ -5,18 +5,40 @@ const NOW_S = 1_800_000_000;
 
 describe('chooseSession', () => {
   it('connects with a live ID token when signed in', () => {
-    const live = jwt({ exp: NOW_S + 600 });
+    const live = jwt({ exp: NOW_S + 600, email_verified: true });
     expect(chooseSession({ id_token: live }, 'anon-tok', NOW_S)).toEqual({
       token: live,
       signedIn: true,
     });
   });
 
+  it('treats a live ID token without a verified email as anonymous', () => {
+    // SpacetimeAuth's anonymous login: a trusted issuer, a live token, no email.
+    // The server calls it anonymous (server/src/signin.rs), so the client must too.
+    expect(
+      chooseSession({ id_token: jwt({ exp: NOW_S + 600 }) }, 'anon-tok', NOW_S),
+    ).toEqual({
+      token: 'anon-tok',
+      signedIn: false,
+    });
+    expect(
+      chooseSession(
+        { id_token: jwt({ exp: NOW_S + 600, email_verified: false }) },
+        'anon-tok',
+        NOW_S,
+      ).signedIn,
+    ).toBe(false);
+  });
+
   it('falls back to the anonymous token when the ID token has expired', () => {
     // An expired token would be refused with a 401 and the connection would retry
     // forever; anonymous is the recoverable state.
     expect(
-      chooseSession({ id_token: jwt({ exp: NOW_S - 1 }) }, 'anon-tok', NOW_S),
+      chooseSession(
+        { id_token: jwt({ exp: NOW_S - 1, email_verified: true }) },
+        'anon-tok',
+        NOW_S,
+      ),
     ).toEqual({
       token: 'anon-tok',
       signedIn: false,

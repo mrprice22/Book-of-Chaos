@@ -4,6 +4,7 @@ import {
   EXPIRY_LEEWAY_S,
   idTokenExpiry,
   isLive,
+  isVerified,
   RENEW_AHEAD_S,
   RENEW_RETRY_MS,
   renewDelayMs,
@@ -87,6 +88,22 @@ describe('idTokenExpiry', () => {
     expect(idTokenExpiry('a.!!!.c')).toBeUndefined();
     expect(idTokenExpiry(jwt({ sub: 'x' }))).toBeUndefined();
     expect(idTokenExpiry(jwt({ exp: '1234' }))).toBeUndefined();
+  });
+});
+
+describe('isVerified', () => {
+  it('is true only for email_verified: true', () => {
+    expect(isVerified(jwt({ exp: 1, email_verified: true }))).toBe(true);
+  });
+
+  it('is false for the anonymous login, which carries no email claim', () => {
+    expect(isVerified(jwt({ exp: 1, login_method: 'magic_link' }))).toBe(false);
+  });
+
+  it('is false for a false or non-boolean claim, and for anything unreadable', () => {
+    expect(isVerified(jwt({ email_verified: false }))).toBe(false);
+    expect(isVerified(jwt({ email_verified: 'true' }))).toBe(false);
+    expect(isVerified('opaque')).toBe(false);
   });
 });
 
