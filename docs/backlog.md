@@ -543,9 +543,19 @@ M16–M19 below are amended where a record changed their shape.
 
 ## M15 — Durable sign-in
 
-- [~] **M15.1** Sign-in per M14.2. The identity survives a cleared browser. Client-side
+- [x] **M15.1** Sign-in per M14.2. The identity survives a cleared browser. Client-side
       only: the server already accepts the ID token, and nothing on it decides "signed in"
       until M15.3
+      Verified 2026-11-20 by the human on `https://book-of-chaos.com`. A magic-link sign-in
+      was identity `c2002672…cd650`, and a private window signing in with the same email was
+      the same identity. The ID token's claims: `login_method: "magic_link"`, `sub` =
+      `provider_id` = a SpacetimeAuth user id, `email_verified`, and a **900-second lifetime**
+- [ ] **M15.4** Keep a sign-in alive past its 15-minute ID token (found by M15.1). Renew
+      with the refresh token if SpacetimeAuth issues one for `offline_access`. If not, use
+      a silent re-authorization. When a page loads with an expired ID token, renew before
+      falling back to anonymous. A reconnect opens with the current token, not the one the
+      page loaded with. Unit tests on the pure parts, plus a human check that a reader is
+      still signed in after 20 minutes and after a reload
 - [ ] **M15.2** Existing `users` rows keep their username through the switch, by 0002's
       two-step link. It moves every identity-keyed row (`users`, `books.owner`,
       `reader_progress`, `quiz_attempts`), not only the username

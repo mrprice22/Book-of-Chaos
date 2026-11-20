@@ -126,9 +126,12 @@ one.
 
 ## Not measured
 
-- **`login_method` is probably the anonymous marker.** The discovery document lists a
-  `login_method` claim, and that is the likely way to tell an anonymous SpacetimeAuth login
-  from a magic link. It is confirmed only once a real token of each kind has been read.
+- **`login_method` is the anonymous marker, half confirmed.** A real magic-link ID token
+  (2026-11-20, M15.1's live test) carries `login_method: "magic_link"`, alongside
+  `sub`/`provider_id` (a SpacetimeAuth user id), `project_id`, `email`, `email_verified`, and
+  `aud` = the client id. The anonymous login's value has not been read yet.
+- **ID tokens last 15 minutes** (`exp − iat = 900` on that token). A durable identity is not
+  a durable session, so M15.4 adds renewal.
 - **A real SpacetimeAuth token.** The project exists and its discovery document, client ID
   and redirect URIs were checked (blocked.md, resolved M14.2). But no one has signed in, so
   no real token has been through a module yet. That is M15.1's first live run.
