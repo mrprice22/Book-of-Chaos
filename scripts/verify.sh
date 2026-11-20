@@ -180,6 +180,11 @@ stage "quiz-gate"     "client/e2e/quiz-gate.spec.ts" \
 stage "identity-link" "client/e2e/identity-link.spec.ts" \
   "cd client && npm run --silent test:e2e -- --project=identity-link"
 
+# The only check that a caller who is not signed in reads just the books open to it,
+# from views over private tables, and calls no writing reducer (M15.3).
+stage "anonymous"     "client/e2e/anonymous.spec.ts" \
+  "cd client && npm run --silent test:e2e -- --project=anonymous"
+
 # --- Verdict ----------------------------------------------------------------
 [ "$LIST_ONLY" = 1 ] && exit 0
 

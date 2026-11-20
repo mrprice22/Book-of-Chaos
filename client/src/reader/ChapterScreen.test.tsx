@@ -42,7 +42,7 @@ vi.mock('spacetimedb/react', async () => {
 function quizRows() {
   sdk.rows = {
     ...sdk.rows,
-    knowledgeBlocks: [
+    visibleBlocks: [
       aBlock({ blockId: 100n, chapterId: 10n, title: 'Intro' }),
       aBlock({
         blockId: 101n,
@@ -52,9 +52,9 @@ function quizRows() {
         blockType: { tag: 'Quiz' },
       }),
     ],
-    quizConfig: [aQuizConfig({ blockId: 101n, passThreshold: 100 })],
-    quizQuestions: [aQuestion({ questionId: 200n, blockId: 101n })],
-    quizOptions: [
+    visibleQuizConfig: [aQuizConfig({ blockId: 101n, passThreshold: 100 })],
+    visibleQuizQuestions: [aQuestion({ questionId: 200n, blockId: 101n })],
+    visibleQuizOptions: [
       anOption({ optionId: 300n, questionId: 200n, textHtml: 'The server', position: 0 }),
       anOption({ optionId: 301n, questionId: 200n, textHtml: 'The client', position: 1 }),
     ],
@@ -72,9 +72,9 @@ describe('ChapterScreen', () => {
       submitQuiz: vi.fn(() => Promise.resolve()),
     };
     sdk.rows = {
-      chapters: [aChapter({ chapterId: 10n, title: 'Attractors' })],
-      knowledgeBlocks: [aBlock({ blockId: 100n, chapterId: 10n, title: 'Intro' })],
-      chapterDeps: [],
+      visibleChapters: [aChapter({ chapterId: 10n, title: 'Attractors' })],
+      visibleBlocks: [aBlock({ blockId: 100n, chapterId: 10n, title: 'Intro' })],
+      visibleChapterDeps: [],
       readerProgress: [],
     };
   });
@@ -87,7 +87,7 @@ describe('ChapterScreen', () => {
   it('shows only the blocks of that chapter', () => {
     sdk.rows = {
       ...sdk.rows,
-      knowledgeBlocks: [
+      visibleBlocks: [
         aBlock({ blockId: 100n, chapterId: 10n, title: 'Mine' }),
         aBlock({ blockId: 200n, chapterId: 11n, title: 'Someone else’s' }),
       ],
@@ -148,11 +148,11 @@ describe('ChapterScreen', () => {
     // would have hidden both.
     sdk.rows = {
       ...sdk.rows,
-      knowledgeBlocks: [
+      visibleBlocks: [
         aBlock({ blockId: 100n, chapterId: 10n, title: 'Intro' }),
         aBlock({ blockId: 101n, chapterId: 10n, title: 'Later', position: 1 }),
       ],
-      blockDeps: [aBlockDep(101n, 100n)],
+      visibleBlockDeps: [aBlockDep(101n, 100n)],
     };
     const { rerender } = render(<ChapterScreen chapterId={10n} />);
 
@@ -173,16 +173,16 @@ describe('ChapterScreen', () => {
   it('locks a block whose prerequisite lives in another chapter', () => {
     // The edge the graph has to be built book-wide to see at all.
     sdk.rows = {
-      chapters: [
+      visibleChapters: [
         aChapter({ chapterId: 9n, title: 'Elsewhere' }),
         aChapter({ chapterId: 10n, title: 'Attractors' }),
       ],
-      knowledgeBlocks: [
+      visibleBlocks: [
         aBlock({ blockId: 90n, chapterId: 9n }),
         aBlock({ blockId: 100n, chapterId: 10n, title: 'Intro' }),
       ],
-      chapterDeps: [],
-      blockDeps: [aBlockDep(100n, 90n)],
+      visibleChapterDeps: [],
+      visibleBlockDeps: [aBlockDep(100n, 90n)],
       readerProgress: [],
     };
     render(<ChapterScreen chapterId={10n} />);
@@ -195,15 +195,15 @@ describe('ChapterScreen', () => {
 
   it('locks a blocked chapter reached by direct URL, with no way to complete it', () => {
     sdk.rows = {
-      chapters: [
+      visibleChapters: [
         aChapter({ chapterId: 9n, title: 'Prerequisite' }),
         aChapter({ chapterId: 10n, title: 'Attractors' }),
       ],
-      knowledgeBlocks: [
+      visibleBlocks: [
         aBlock({ blockId: 90n, chapterId: 9n }),
         aBlock({ blockId: 100n, chapterId: 10n, title: 'Intro' }),
       ],
-      chapterDeps: [{ depId: 1n, chapterId: 10n, dependsOnChapterId: 9n }],
+      visibleChapterDeps: [{ depId: 1n, chapterId: 10n, dependsOnChapterId: 9n }],
       readerProgress: [],
     };
     render(<ChapterScreen chapterId={10n} />);
@@ -217,15 +217,15 @@ describe('ChapterScreen', () => {
 
   it('opens that same chapter once the prerequisite is finished', () => {
     sdk.rows = {
-      chapters: [
+      visibleChapters: [
         aChapter({ chapterId: 9n, title: 'Prerequisite' }),
         aChapter({ chapterId: 10n, title: 'Attractors' }),
       ],
-      knowledgeBlocks: [
+      visibleBlocks: [
         aBlock({ blockId: 90n, chapterId: 9n }),
         aBlock({ blockId: 100n, chapterId: 10n, title: 'Intro' }),
       ],
-      chapterDeps: [{ depId: 1n, chapterId: 10n, dependsOnChapterId: 9n }],
+      visibleChapterDeps: [{ depId: 1n, chapterId: 10n, dependsOnChapterId: 9n }],
       readerProgress: [someProgress({ identity: READER, blockId: 90n })],
     };
     render(<ChapterScreen chapterId={10n} />);
@@ -335,13 +335,15 @@ describe('ChapterScreen', () => {
 describe('the fake subscription', () => {
   it('keys rows by the same accessor names the query builder uses', async () => {
     const { tables } = await import('../module_bindings');
-    expect(getQueryAccessorName(tables.chapters)).toBe('chapters');
-    expect(getQueryAccessorName(tables.knowledgeBlocks)).toBe('knowledgeBlocks');
+    expect(getQueryAccessorName(tables.visibleChapters)).toBe('visibleChapters');
+    expect(getQueryAccessorName(tables.visibleBlocks)).toBe('visibleBlocks');
     expect(getQueryAccessorName(tables.readerProgress)).toBe('readerProgress');
-    expect(getQueryAccessorName(tables.chapterDeps)).toBe('chapterDeps');
-    expect(getQueryAccessorName(tables.quizConfig)).toBe('quizConfig');
-    expect(getQueryAccessorName(tables.quizQuestions)).toBe('quizQuestions');
-    expect(getQueryAccessorName(tables.quizOptions)).toBe('quizOptions');
+    expect(getQueryAccessorName(tables.visibleChapterDeps)).toBe('visibleChapterDeps');
+    expect(getQueryAccessorName(tables.visibleQuizConfig)).toBe('visibleQuizConfig');
+    expect(getQueryAccessorName(tables.visibleQuizQuestions)).toBe(
+      'visibleQuizQuestions',
+    );
+    expect(getQueryAccessorName(tables.visibleQuizOptions)).toBe('visibleQuizOptions');
     expect(getQueryAccessorName(tables.quizAttempts)).toBe('quizAttempts');
     expect(getQueryAccessorName(tables.quizAttemptResults)).toBe('quizAttemptResults');
   });

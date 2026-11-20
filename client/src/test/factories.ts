@@ -27,6 +27,7 @@ export function aBook(overrides: Partial<Book> = {}): Book {
     locale: undefined,
     createdAt: NOW,
     updatedAt: NOW,
+    anonymousAccess: false,
     ...overrides,
   };
 }

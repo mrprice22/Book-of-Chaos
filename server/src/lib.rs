@@ -11,7 +11,7 @@ pub mod sanitize;
 pub mod signin;
 pub mod unlock;
 
-use spacetimedb::{Identity, ReducerContext, SpacetimeType, Table, Timestamp};
+use spacetimedb::{Identity, ReducerContext, SpacetimeType, Table, Timestamp, ViewContext};
 
 // ---------------------------------------------------------------------------
 // Enums
@@ -55,7 +55,7 @@ pub struct User {
     pub created_at: Timestamp,
 }
 
-#[spacetimedb::table(accessor = books, public)]
+#[spacetimedb::table(accessor = books)]
 pub struct Book {
     #[primary_key]
     #[auto_inc]
@@ -71,9 +71,15 @@ pub struct Book {
     pub locale: Option<String>,
     pub created_at: Timestamp,
     pub updated_at: Timestamp,
+    /// Whether a reader who is not signed in may read this book (M15.3). Set by the
+    /// owner, off by default. Indexed because the reading views reach books only
+    /// through an index (decision 0001), and this is the column they select on.
+    #[default(false)]
+    #[index(btree)]
+    pub anonymous_access: bool,
 }
 
-#[spacetimedb::table(accessor = chapters, public)]
+#[spacetimedb::table(accessor = chapters)]
 pub struct Chapter {
     #[primary_key]
     #[auto_inc]
@@ -94,7 +100,7 @@ pub struct Chapter {
     pub updated_at: Timestamp,
 }
 
-#[spacetimedb::table(accessor = knowledge_blocks, public)]
+#[spacetimedb::table(accessor = knowledge_blocks)]
 pub struct KnowledgeBlock {
     #[primary_key]
     #[auto_inc]
@@ -118,7 +124,7 @@ pub struct KnowledgeBlock {
 
 /// One row per edge: `chapter_id` requires `depends_on_chapter_id` to be complete.
 /// Chapter-level hard dependencies only — block-level prerequisites are deferred.
-#[spacetimedb::table(accessor = chapter_deps, public)]
+#[spacetimedb::table(accessor = chapter_deps)]
 pub struct ChapterDep {
     #[primary_key]
     #[auto_inc]
@@ -139,7 +145,7 @@ pub struct ChapterDep {
 /// while a block's may sit in any chapter of the same book. That is the v0.2
 /// scope's wording — "within its chapter or across chapters" — and it is why
 /// `set_block_deps` gathers candidates book-wide rather than chapter-wide.
-#[spacetimedb::table(accessor = block_deps, public)]
+#[spacetimedb::table(accessor = block_deps)]
 pub struct BlockDep {
     #[primary_key]
     #[auto_inc]
@@ -192,7 +198,7 @@ pub struct ReaderProgress {
 
 /// Per-`Quiz`-block settings. One row per block, keyed by it, so a block either
 /// has a quiz or does not — there is no "which config is current" question.
-#[spacetimedb::table(accessor = quiz_config, public)]
+#[spacetimedb::table(accessor = quiz_config)]
 pub struct QuizConfig {
     /// The `KnowledgeBlock` this quiz belongs to. Its `block_type` is `Quiz`.
     #[primary_key]
@@ -202,7 +208,7 @@ pub struct QuizConfig {
     pub pass_threshold: u32,
 }
 
-#[spacetimedb::table(accessor = quiz_questions, public)]
+#[spacetimedb::table(accessor = quiz_questions)]
 pub struct QuizQuestion {
     #[primary_key]
     #[auto_inc]
@@ -223,7 +229,7 @@ pub struct QuizQuestion {
     pub is_multi_answer: bool,
 }
 
-#[spacetimedb::table(accessor = quiz_options, public)]
+#[spacetimedb::table(accessor = quiz_options)]
 pub struct QuizOption {
     #[primary_key]
     #[auto_inc]
@@ -334,6 +340,20 @@ pub struct LinkRequest {
     pub created_at: Timestamp,
 }
 
+/// Identities that have connected signed in (M15.3). Private.
+///
+/// A view cannot see the caller's token, only its identity, so the reading views
+/// look the caller up here. `identity_connected` writes the row, from the token the
+/// connection opened with. That is sound because SpacetimeDB derives an identity from
+/// its token's `iss` and `sub`: a signed-in identity is one subject at a trusted
+/// issuer, and no anonymous token can arrive as it.
+#[spacetimedb::table(accessor = signed_in)]
+pub struct SignedIn {
+    #[primary_key]
+    pub identity: Identity,
+    pub first_seen: Timestamp,
+}
+
 // ---------------------------------------------------------------------------
 // Lifecycle reducers
 // ---------------------------------------------------------------------------
@@ -348,6 +368,13 @@ pub fn init(_ctx: &ReducerContext) {
 #[spacetimedb::reducer(client_connected)]
 pub fn identity_connected(ctx: &ReducerContext) {
     log::debug!("client connected: {}", ctx.sender());
+    let caller = ctx.sender();
+    if caller_signed_in(ctx) && ctx.db.signed_in().identity().find(caller).is_none() {
+        ctx.db.signed_in().insert(SignedIn {
+            identity: caller,
+            first_seen: ctx.timestamp,
+        });
+    }
 }
 
 #[spacetimedb::reducer(client_disconnected)]
@@ -525,6 +552,7 @@ pub fn create_book(ctx: &ReducerContext, title: String, description: String) -> 
         locale: None,
         created_at: ctx.timestamp,
         updated_at: ctx.timestamp,
+        anonymous_access: false,
     });
     Ok(())
 }
@@ -562,6 +590,26 @@ pub fn publish_book(ctx: &ReducerContext, book_id: u64) -> Result<(), String> {
     }
     ctx.db.books().book_id().update(Book {
         status: BookStatus::Published,
+        updated_at: ctx.timestamp,
+        ..book
+    });
+    Ok(())
+}
+
+/// Let readers who are not signed in read this book, or stop them (M15.3). Only a
+/// published book is shown to them, so turning this on for a draft takes effect when
+/// it is published.
+#[spacetimedb::reducer]
+pub fn set_anonymous_access(
+    ctx: &ReducerContext,
+    book_id: u64,
+    enabled: bool,
+) -> Result<(), String> {
+    let book = find_book(ctx, book_id)?;
+    rules::require_owner(book.owner == ctx.sender())?;
+
+    ctx.db.books().book_id().update(Book {
+        anonymous_access: enabled,
         updated_at: ctx.timestamp,
         ..book
     });
@@ -1413,4 +1461,121 @@ fn progress_for_reader(ctx: &ReducerContext, reader: Identity) -> unlock::Progre
             .filter(reader)
             .map(|p| p.block_id),
     )
+}
+
+// ---------------------------------------------------------------------------
+// Reading views (M15.3)
+// ---------------------------------------------------------------------------
+//
+// The book tables are private, so these views are the only way a client reads
+// them. Each returns the rows of the books `rules::can_read_book` lets the caller
+// read, and nothing else. This is decision 0001's pattern: a private table behind a
+// `ViewContext` view. A view reaches rows only through an index, so each one walks
+// down from the readable books: book, chapter, block, then what hangs off a block.
+
+fn readable_books(ctx: &ViewContext) -> Vec<Book> {
+    let me = ctx.sender();
+    let signed_in = ctx.db.signed_in().identity().find(me).is_some();
+    let books = ctx.db.books();
+    books
+        .anonymous_access()
+        .filter(true)
+        .chain(books.anonymous_access().filter(false))
+        .filter(|book| {
+            rules::can_read_book(
+                signed_in,
+                book.owner == me,
+                book.anonymous_access,
+                book.status == BookStatus::Published,
+            )
+        })
+        .collect()
+}
+
+fn readable_chapters(ctx: &ViewContext) -> Vec<Chapter> {
+    readable_books(ctx)
+        .iter()
+        .flat_map(|book| ctx.db.chapters().book_id().filter(book.book_id))
+        .collect()
+}
+
+fn readable_blocks(ctx: &ViewContext) -> Vec<KnowledgeBlock> {
+    readable_chapters(ctx)
+        .iter()
+        .flat_map(|chapter| {
+            ctx.db
+                .knowledge_blocks()
+                .chapter_id()
+                .filter(chapter.chapter_id)
+        })
+        .collect()
+}
+
+fn readable_questions(ctx: &ViewContext) -> Vec<QuizQuestion> {
+    readable_blocks(ctx)
+        .iter()
+        .flat_map(|block| ctx.db.quiz_questions().block_id().filter(block.block_id))
+        .collect()
+}
+
+#[spacetimedb::view(accessor = visible_books, public)]
+fn visible_books(ctx: &ViewContext) -> Vec<Book> {
+    readable_books(ctx)
+}
+
+#[spacetimedb::view(accessor = visible_chapters, public)]
+fn visible_chapters(ctx: &ViewContext) -> Vec<Chapter> {
+    readable_chapters(ctx)
+}
+
+#[spacetimedb::view(accessor = visible_blocks, public)]
+fn visible_blocks(ctx: &ViewContext) -> Vec<KnowledgeBlock> {
+    readable_blocks(ctx)
+}
+
+#[spacetimedb::view(accessor = visible_chapter_deps, public)]
+fn visible_chapter_deps(ctx: &ViewContext) -> Vec<ChapterDep> {
+    readable_chapters(ctx)
+        .iter()
+        .flat_map(|chapter| {
+            ctx.db
+                .chapter_deps()
+                .chapter_id()
+                .filter(chapter.chapter_id)
+        })
+        .collect()
+}
+
+#[spacetimedb::view(accessor = visible_block_deps, public)]
+fn visible_block_deps(ctx: &ViewContext) -> Vec<BlockDep> {
+    readable_blocks(ctx)
+        .iter()
+        .flat_map(|block| ctx.db.block_deps().block_id().filter(block.block_id))
+        .collect()
+}
+
+#[spacetimedb::view(accessor = visible_quiz_config, public)]
+fn visible_quiz_config(ctx: &ViewContext) -> Vec<QuizConfig> {
+    readable_blocks(ctx)
+        .iter()
+        .filter_map(|block| ctx.db.quiz_config().block_id().find(block.block_id))
+        .collect()
+}
+
+#[spacetimedb::view(accessor = visible_quiz_questions, public)]
+fn visible_quiz_questions(ctx: &ViewContext) -> Vec<QuizQuestion> {
+    readable_questions(ctx)
+}
+
+#[spacetimedb::view(accessor = visible_quiz_options, public)]
+fn visible_quiz_options(ctx: &ViewContext) -> Vec<QuizOption> {
+    readable_questions(ctx)
+        .iter()
+        .flat_map(|question| {
+            ctx.db
+                .quiz_options()
+                .question_id()
+                .filter(question.question_id)
+        })
+        .collect()
 }

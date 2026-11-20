@@ -19,10 +19,12 @@
  * to reuse the one `webServer` that already brings the stack up.
  */
 import { test, expect } from '@playwright/test';
-import { DbConnection } from '../src/module_bindings';
+import type { DbConnection } from '../src/module_bindings';
+import type { MockIssuer } from './support/mockIssuer';
+import { connectSignedIn, startTrustedIssuer } from './support/signIn';
 
-const URI = process.env.SPACETIME_URI ?? 'ws://localhost:3000';
-const DB_NAME = process.env.SPACETIME_DB_NAME ?? 'book-of-chaos';
+/** The trusted mock issuer, so callers are signed in and may write (M15.3). */
+let issuer: MockIssuer;
 
 /** The single message `rules::require_owner` returns, by design — it must not vary by call site. */
 const REFUSAL = 'Only the owner of this book can change it.';
@@ -49,16 +51,9 @@ let own: {
   quizBlockId: bigint;
 };
 
-function connect(): Promise<DbConnection> {
-  return new Promise((resolve, reject) => {
-    DbConnection.builder()
-      .withUri(URI)
-      .withDatabaseName(DB_NAME)
-      .onConnect((c) => resolve(c))
-      .onConnectError((_ctx, error) => reject(error))
-      .build();
-    setTimeout(() => reject(new Error(`Timed out connecting to ${URI}/${DB_NAME}`)), 15_000);
-  });
+/** A new signed-in identity (`support/signIn.ts`). */
+async function connect(): Promise<DbConnection> {
+  return (await connectSignedIn(issuer)).conn;
 }
 
 /** Reducer calls resolve before the caller's tables catch up; wait for the row. */
@@ -87,7 +82,7 @@ async function refusalFrom(call: Promise<void>): Promise<string> {
 
 /** Every chapter currently in a book, read from the subscription rather than remembered. */
 function chapterIdsOf(bookId: bigint): bigint[] {
-  return [...conn.db.chapters.iter()]
+  return [...conn.db.visibleChapters.iter()]
     .filter((c) => c.bookId === bookId)
     .map((c) => c.chapterId);
 }
@@ -106,20 +101,22 @@ async function createBlockIn(
     isOptional: false,
   });
   const block = await waitFor(
-    () => [...conn.db.knowledgeBlocks.iter()].find((b) => b.chapterId === chapterId && b.title === title),
+    () => [...conn.db.visibleBlocks.iter()].find((b) => b.chapterId === chapterId && b.title === title),
     `block "${title}"`,
   );
   return block.blockId;
 }
 
 test.beforeAll(async () => {
-  // A fresh connection with no stored token is a brand-new anonymous identity, which
-  // is precisely the non-owner this file is about.
+  // A brand-new signed-in identity: a stranger to the seeded book, which is precisely
+  // the non-owner this file is about. Signed in, because since M15.3 a caller who is
+  // not is refused before ownership is even asked about.
+  issuer = await startTrustedIssuer();
   conn = await connect();
   await conn.subscriptionBuilder().subscribeToAllTables();
 
   const seeded = await waitFor(
-    () => [...conn.db.books.iter()].find((b) => b.title === SEEDED_BOOK),
+    () => [...conn.db.visibleBooks.iter()].find((b) => b.title === SEEDED_BOOK),
     `the seeded book "${SEEDED_BOOK}"`,
   );
 
@@ -129,10 +126,10 @@ test.beforeAll(async () => {
     'the harness must not own the seeded book, or the negative cases are vacuous',
   ).not.toBe(conn.identity?.toHexString());
 
-  const foreignChapters = [...conn.db.chapters.iter()].filter((c) => c.bookId === seeded.bookId);
+  const foreignChapters = [...conn.db.visibleChapters.iter()].filter((c) => c.bookId === seeded.bookId);
   const foreignChapter = foreignChapters[0];
   if (!foreignChapter) throw new Error('the seeded book has no chapters to attack');
-  const foreignBlock = [...conn.db.knowledgeBlocks.iter()].find((b) =>
+  const foreignBlock = [...conn.db.visibleBlocks.iter()].find((b) =>
     foreignChapters.some((c) => c.chapterId === b.chapterId),
   );
   if (!foreignBlock) throw new Error('the seeded book has no blocks to attack');
@@ -151,7 +148,7 @@ test.beforeAll(async () => {
     description: 'Created by the auth-reject harness to prove these calls work when owned.',
   });
   const ownBook = await waitFor(
-    () => [...conn.db.books.iter()].find((b) => b.title === ownTitle),
+    () => [...conn.db.visibleBooks.iter()].find((b) => b.title === ownTitle),
     'the control book',
   );
 
@@ -165,7 +162,7 @@ test.beforeAll(async () => {
     });
     const chapter = await waitFor(
       () =>
-        [...conn.db.chapters.iter()].find((c) => c.bookId === ownBook.bookId && c.title === title),
+        [...conn.db.visibleChapters.iter()].find((c) => c.bookId === ownBook.bookId && c.title === title),
       `control chapter "${title}"`,
     );
     return chapter.chapterId;
@@ -188,8 +185,9 @@ test.beforeAll(async () => {
   };
 });
 
-test.afterAll(() => {
+test.afterAll(async () => {
   conn?.disconnect();
+  await issuer?.close();
 });
 
 test('update_book is refused for a non-owner', async () => {
@@ -388,5 +386,5 @@ test('delete_block is refused for a non-owner', async () => {
 
   // The refusal must also have left the row alone — a reducer that errors *after*
   // mutating would pass every assertion above.
-  expect([...conn.db.knowledgeBlocks.iter()].some((b) => b.blockId === foreign.blockId)).toBe(true);
+  expect([...conn.db.visibleBlocks.iter()].some((b) => b.blockId === foreign.blockId)).toBe(true);
 });

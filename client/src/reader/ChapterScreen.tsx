@@ -29,14 +29,14 @@ function reasonFrom(error: unknown): string {
 /** Live data for one chapter, plus the two writes the reader can make. */
 export function ChapterScreen({ chapterId }: { chapterId: bigint }) {
   const { identity } = useSpacetimeDB();
-  const [chapters, chaptersReady] = useTable(tables.chapters);
-  const [blocks, blocksReady] = useTable(tables.knowledgeBlocks);
-  const [deps, depsReady] = useTable(tables.chapterDeps);
-  const [blockDeps, blockDepsReady] = useTable(tables.blockDeps);
+  const [chapters, chaptersReady] = useTable(tables.visibleChapters);
+  const [blocks, blocksReady] = useTable(tables.visibleBlocks);
+  const [deps, depsReady] = useTable(tables.visibleChapterDeps);
+  const [blockDeps, blockDepsReady] = useTable(tables.visibleBlockDeps);
   const [progress] = useTable(tables.readerProgress);
-  const [quizConfigs] = useTable(tables.quizConfig);
-  const [quizQuestions] = useTable(tables.quizQuestions);
-  const [quizOptions] = useTable(tables.quizOptions);
+  const [quizConfigs] = useTable(tables.visibleQuizConfig);
+  const [quizQuestions] = useTable(tables.visibleQuizQuestions);
+  const [quizOptions] = useTable(tables.visibleQuizOptions);
   const [quizAttempts] = useTable(tables.quizAttempts);
   const [quizResults] = useTable(tables.quizAttemptResults);
   const completeBlock = useReducer(reducers.completeBlock);

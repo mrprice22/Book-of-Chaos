@@ -15,7 +15,7 @@ import {
 
 
 export default __t.row({
-  bookId: __t.u64().primaryKey().name("book_id"),
+  bookId: __t.u64().name("book_id"),
   owner: __t.identity(),
   title: __t.string(),
   description: __t.string(),
@@ -25,4 +25,5 @@ export default __t.row({
   locale: __t.option(__t.string()),
   createdAt: __t.timestamp().name("created_at"),
   updatedAt: __t.timestamp().name("updated_at"),
+  anonymousAccess: __t.bool().name("anonymous_access"),
 });

@@ -130,8 +130,9 @@ if [ "$TARGET" = remote ]; then
 
   if [ "$REMOTE_SEED" = 1 ]; then
     # The seed is idempotent by early-return: it looks for the demo book by title and
-    # does nothing if it is already there. It connects anonymously, so it does not own
-    # a book a previous run created and could not edit one if it wanted to.
+    # does nothing if it is already there. Since M15.3 it must be signed in to write,
+    # and the hosted module trusts SpacetimeAuth only, so set BOC_SEED_TOKEN to a real
+    # ID token from the reader's sign-in (scripts/seed.ts).
     log "seeding the demo book on $REMOTE_DB_NAME (idempotent)"
     run "cd client && SPACETIME_URI='$REMOTE_URI' SPACETIME_DB_NAME='$REMOTE_DB_NAME' npm run --silent seed"
   fi

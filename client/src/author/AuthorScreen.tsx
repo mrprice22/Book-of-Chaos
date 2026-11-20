@@ -8,7 +8,7 @@ import { useAction } from './useAction';
 /** The author's own books, and the form that makes another one. */
 export function AuthorScreen() {
   const { identity } = useSpacetimeDB();
-  const [books, booksReady] = useTable(tables.books);
+  const [books, booksReady] = useTable(tables.visibleBooks);
   const createBook = useReducer(reducers.createBook);
   const action = useAction(createBook);
 

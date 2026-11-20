@@ -49,14 +49,16 @@ describe('AuthorBookScreen', () => {
     sdk.calls = [];
     sdk.rejectWith = {};
     sdk.rows = {
-      books: [aBook({ bookId: 1n, title: 'Chaos', owner: ME })],
-      chapters: [],
-      knowledgeBlocks: [],
+      visibleBooks: [aBook({ bookId: 1n, title: 'Chaos', owner: ME })],
+      visibleChapters: [],
+      visibleBlocks: [],
     };
   });
 
   it('refuses a book that is not the caller’s, without confirming it exists', () => {
-    sdk.rows = { books: [aBook({ bookId: 1n, title: 'Theirs', owner: SOMEONE_ELSE })] };
+    sdk.rows = {
+      visibleBooks: [aBook({ bookId: 1n, title: 'Theirs', owner: SOMEONE_ELSE })],
+    };
     render(<AuthorBookScreen bookId={1n} />);
     expect(screen.getByText(/does not exist, or is not yours/i)).toBeInTheDocument();
     expect(screen.queryByText('Theirs')).not.toBeInTheDocument();
@@ -90,7 +92,7 @@ describe('AuthorBookScreen', () => {
   it('creates a block in the chapter whose form was used', async () => {
     sdk.rows = {
       ...sdk.rows,
-      chapters: [
+      visibleChapters: [
         aChapter({ chapterId: 10n, bookId: 1n, title: 'First', position: 0 }),
         aChapter({ chapterId: 11n, bookId: 1n, title: 'Second', position: 1 }),
       ],
@@ -119,11 +121,11 @@ describe('AuthorBookScreen', () => {
   it('lists chapters in author order and their blocks in reading order', () => {
     sdk.rows = {
       ...sdk.rows,
-      chapters: [
+      visibleChapters: [
         aChapter({ chapterId: 11n, bookId: 1n, title: 'Second', position: 1 }),
         aChapter({ chapterId: 10n, bookId: 1n, title: 'First', position: 0 }),
       ],
-      knowledgeBlocks: [
+      visibleBlocks: [
         aBlock({ blockId: 101n, chapterId: 10n, title: 'Later', position: 1 }),
         aBlock({ blockId: 102n, chapterId: 10n, title: 'Earlier', position: 0 }),
       ],
@@ -152,13 +154,13 @@ describe('AuthorBookScreen prerequisites', () => {
     sdk.calls = [];
     sdk.rejectWith = {};
     sdk.rows = {
-      books: [aBook({ bookId: 1n, title: 'Chaos', owner: ME })],
-      chapters: [
+      visibleBooks: [aBook({ bookId: 1n, title: 'Chaos', owner: ME })],
+      visibleChapters: [
         aChapter({ chapterId: 10n, bookId: 1n, title: 'First', position: 0 }),
         aChapter({ chapterId: 11n, bookId: 1n, title: 'Second', position: 1 }),
       ],
-      knowledgeBlocks: [],
-      chapterDeps: [],
+      visibleBlocks: [],
+      visibleChapterDeps: [],
     };
   });
 
@@ -180,7 +182,7 @@ describe('AuthorBookScreen prerequisites', () => {
     };
     sdk.rows = {
       ...sdk.rows,
-      chapterDeps: [{ depId: 1n, chapterId: 10n, dependsOnChapterId: 11n }],
+      visibleChapterDeps: [{ depId: 1n, chapterId: 10n, dependsOnChapterId: 11n }],
     };
     render(<AuthorBookScreen bookId={1n} />);
 
@@ -197,7 +199,7 @@ describe('AuthorBookScreen prerequisites', () => {
   it('offers a quiz form on a Quiz block and on nothing else', () => {
     sdk.rows = {
       ...sdk.rows,
-      knowledgeBlocks: [
+      visibleBlocks: [
         aBlock({ blockId: 101n, chapterId: 10n, title: 'Reading', position: 0 }),
         aBlock({
           blockId: 102n,
@@ -215,7 +217,7 @@ describe('AuthorBookScreen prerequisites', () => {
   it('writes the quiz to the block whose form was used', async () => {
     sdk.rows = {
       ...sdk.rows,
-      knowledgeBlocks: [
+      visibleBlocks: [
         aBlock({
           blockId: 102n,
           chapterId: 10n,
@@ -252,7 +254,7 @@ describe('AuthorBookScreen prerequisites', () => {
     sdk.rejectWith = { setQuiz: 'Question 1 has no correct answer marked.' };
     sdk.rows = {
       ...sdk.rows,
-      knowledgeBlocks: [
+      visibleBlocks: [
         aBlock({ blockId: 102n, chapterId: 10n, blockType: { tag: 'Quiz' } }),
         aBlock({ blockId: 103n, chapterId: 11n, blockType: { tag: 'Quiz' } }),
       ],
@@ -271,7 +273,7 @@ describe('AuthorBookScreen prerequisites', () => {
   it('reflects the stored edges rather than a stale local draft', () => {
     sdk.rows = {
       ...sdk.rows,
-      chapterDeps: [{ depId: 1n, chapterId: 11n, dependsOnChapterId: 10n }],
+      visibleChapterDeps: [{ depId: 1n, chapterId: 11n, dependsOnChapterId: 10n }],
     };
     render(<AuthorBookScreen bookId={1n} />);
     expect(screen.getByLabelText('First', { selector: '#prereq-11-10' })).toBeChecked();
@@ -283,13 +285,15 @@ describe('AuthorBookScreen publishing', () => {
     sdk.ready = true;
     sdk.calls = [];
     sdk.rejectWith = {};
-    sdk.rows = { chapters: [], knowledgeBlocks: [], chapterDeps: [] };
+    sdk.rows = { visibleChapters: [], visibleBlocks: [], visibleChapterDeps: [] };
   });
 
   it('publishes this book', async () => {
     sdk.rows = {
       ...sdk.rows,
-      books: [aBook({ bookId: 4n, title: 'Chaos', owner: ME, status: { tag: 'Draft' } })],
+      visibleBooks: [
+        aBook({ bookId: 4n, title: 'Chaos', owner: ME, status: { tag: 'Draft' } }),
+      ],
     };
     render(<AuthorBookScreen bookId={4n} />);
 
@@ -300,7 +304,7 @@ describe('AuthorBookScreen publishing', () => {
   it('shows the published state, with nothing left to press', () => {
     sdk.rows = {
       ...sdk.rows,
-      books: [
+      visibleBooks: [
         aBook({ bookId: 4n, title: 'Chaos', owner: ME, status: { tag: 'Published' } }),
       ],
     };

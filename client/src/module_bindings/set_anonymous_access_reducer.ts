@@ -10,8 +10,7 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default __t.row({
-  depId: __t.u64().primaryKey().name("dep_id"),
-  blockId: __t.u64().name("block_id"),
-  dependsOnBlockId: __t.u64().name("depends_on_block_id"),
-});
+export default {
+  bookId: __t.u64(),
+  enabled: __t.bool(),
+};

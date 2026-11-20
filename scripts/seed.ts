@@ -16,9 +16,22 @@
  *
  * Idempotent: it looks for the demo book by title and does nothing if it is already
  * there. Re-running after a `spacetime publish --clear-database` seeds again.
+ *
+ * It signs in, because since M15.3 a caller who is not signed in writes nothing.
+ * `BOC_SEED_TOKEN`, if set, is the ID token it connects with: a real sign-in, which is
+ * the only kind the hosted module accepts. Otherwise, against a local server, it mints
+ * one from the mock issuer that `deploy.sh local` builds the module to trust, always
+ * for the same subject. So the seed is one identity on every run, and owns the demo
+ * book it made. Against any other server, with no token, it connects anonymously and
+ * the first write is refused.
  */
 import { DbConnection } from '../client/src/module_bindings';
 import type { BlockType } from '../client/src/module_bindings/types';
+import {
+  createMinter,
+  startIssuer,
+  type MockIssuer,
+} from '../client/e2e/support/mockIssuer';
 
 const URI = process.env.SPACETIME_URI ?? 'ws://localhost:3000';
 const DB_NAME = process.env.SPACETIME_DB_NAME ?? 'book-of-chaos';
@@ -198,11 +211,45 @@ const CHAPTERS: ChapterSpec[] = [
   },
 ];
 
-function connect(): Promise<DbConnection> {
+/** Must match `MOCK_ISSUER_CLIENT` in scripts/deploy.sh. */
+const MOCK_ISSUER_PORT = 3200;
+const MOCK_CLIENT_ID = 'boc-e2e';
+const SEED_SUBJECT = 'demo-seed';
+
+function isLocal(uri: string): boolean {
+  const host = new URL(uri.replace(/^ws/, 'http')).hostname;
+  return host === 'localhost' || host === '127.0.0.1';
+}
+
+/**
+ * The token to connect with, and the mock issuer if this process had to serve it.
+ *
+ * SpacetimeDB fetches the issuer's keys when the token arrives, so the issuer must be
+ * listening. If its port is taken, another process (an e2e stage) is already serving
+ * it, with the same key (`mockIssuer.ts` keeps one per port), so minting is enough.
+ */
+async function seedToken(): Promise<{ token?: string; issuer?: MockIssuer }> {
+  const given = process.env.BOC_SEED_TOKEN;
+  if (given) return { token: given };
+  if (!isLocal(URI)) return {};
+  const token = createMinter(MOCK_ISSUER_PORT)({
+    sub: SEED_SUBJECT,
+    aud: MOCK_CLIENT_ID,
+    emailVerified: true,
+  });
+  try {
+    return { token, issuer: await startIssuer(MOCK_ISSUER_PORT) };
+  } catch {
+    return { token };
+  }
+}
+
+function connect(token: string | undefined): Promise<DbConnection> {
   return new Promise((resolve, reject) => {
     DbConnection.builder()
       .withUri(URI)
       .withDatabaseName(DB_NAME)
+      .withToken(token)
       .onConnect((conn) => resolve(conn))
       .onConnectError((_ctx, error) => reject(error))
       .build();
@@ -244,7 +291,7 @@ async function addBlock(
   });
   const created = await waitFor(
     () =>
-      [...conn.db.knowledgeBlocks.iter()].find(
+      [...conn.db.visibleBlocks.iter()].find(
         (b) => b.chapterId === chapterId && b.title === block.title,
       ),
     `block "${block.title}"`,
@@ -256,7 +303,7 @@ async function addBlock(
   // correctness is written into a non-public table, which only `set_quiz` touches.
   await conn.reducers.setQuiz({ blockId: created.blockId, ...block.quiz });
   await waitFor(() => {
-    const written = [...conn.db.quizQuestions.iter()].filter(
+    const written = [...conn.db.visibleQuizQuestions.iter()].filter(
       (q) => q.blockId === created.blockId,
     );
     return written.length === block.quiz?.questions.length ? written : undefined;
@@ -270,39 +317,77 @@ async function addBlock(
  * The book seeded before v0.2 has no `Check yourself` block, so the smoke test's
  * fail-then-pass path would fail on a control that is not there — a red gate whose
  * cause is nowhere in the failure. Adding the missing block in place is not an
- * option: this script connects anonymously and gets a fresh identity every run, so
- * it does not own the book a previous run created, and `create_block` answers
+ * option: a seed from before M15.3 connected anonymously, with a fresh identity every
+ * run, so this one does not own the book it created, and `create_block` answers
  * "Only the owner of this book can change it."
  *
  * CI never meets this, because it starts with an empty database. A developer's
  * machine does, because `.devhome/spacetime-data` persists by design (M9.6).
  */
 function requireCurrentSeed(conn: DbConnection, bookId: bigint): void {
-  const foundations = [...conn.db.chapters.iter()].find(
+  const foundations = [...conn.db.visibleChapters.iter()].find(
     (c) => c.bookId === bookId && c.title === 'Foundations',
   );
   const hasQuiz =
     foundations !== undefined &&
-    [...conn.db.knowledgeBlocks.iter()].some(
+    [...conn.db.visibleBlocks.iter()].some(
       (b) => b.chapterId === foundations.chapterId && b.title === QUIZ_BLOCK_TITLE,
     );
   if (hasQuiz) return;
 
   throw new Error(
     `"${BOOK_TITLE}" (book ${String(bookId)}) was seeded before the quiz block existed, ` +
-      'and this script cannot add it: it connects anonymously, so it does not own ' +
-      'that book. Re-seed with:\n\n  ./scripts/deploy.sh local --clear\n',
+      'and this script cannot add it: an earlier, anonymous seed owns that book. ' +
+      'Re-seed with:\n\n  ./scripts/deploy.sh local --clear\n',
   );
 }
 
+/**
+ * The demo book is the one anonymous visitors can read (M15.3), so the seed turns
+ * anonymous access on. A demo book seeded before that setting existed was made by an
+ * anonymous identity, so this one cannot change it.
+ */
+async function openToAnonymousReaders(conn: DbConnection, bookId: bigint): Promise<void> {
+  const book = [...conn.db.visibleBooks.iter()].find((b) => b.bookId === bookId);
+  if (book?.anonymousAccess) return;
+  if (book?.owner.toHexString() !== conn.identity?.toHexString()) {
+    throw new Error(
+      `"${BOOK_TITLE}" (book ${String(bookId)}) is closed to anonymous readers, and this ` +
+        'script cannot open it: an earlier, anonymous seed owns it.' +
+        (isLocal(URI)
+          ? ' Re-seed with:\n\n  ./scripts/deploy.sh local --clear\n'
+          : ' Signed-in readers still see it; anonymous visitors do not.'),
+    );
+  }
+  await conn.reducers.setAnonymousAccess({ bookId, enabled: true });
+  await waitFor(
+    () =>
+      [...conn.db.visibleBooks.iter()].find(
+        (b) => b.bookId === bookId && b.anonymousAccess,
+      ),
+    'the book to be open to anonymous readers',
+  );
+  console.log(`opened "${BOOK_TITLE}" to anonymous readers`);
+}
+
 async function main() {
-  const conn = await connect();
+  const { token, issuer } = await seedToken();
+  try {
+    await seed(token);
+  } finally {
+    await issuer?.close();
+  }
+}
+
+async function seed(token: string | undefined) {
+  const conn = await connect(token);
   await conn.subscriptionBuilder().subscribeToAllTables();
   await new Promise((resolve) => setTimeout(resolve, 500));
 
-  const existing = [...conn.db.books.iter()].find((b) => b.title === BOOK_TITLE);
+  const existing = [...conn.db.visibleBooks.iter()].find((b) => b.title === BOOK_TITLE);
   if (existing) {
     requireCurrentSeed(conn, existing.bookId);
+    await openToAnonymousReaders(conn, existing.bookId);
     console.log(
       `"${BOOK_TITLE}" is already seeded (book ${existing.bookId}). Nothing to do.`,
     );
@@ -316,7 +401,7 @@ async function main() {
       'A short tour of dynamical systems, arranged as a dependency graph rather than a reading order.',
   });
   const book = await waitFor(
-    () => [...conn.db.books.iter()].find((b) => b.title === BOOK_TITLE),
+    () => [...conn.db.visibleBooks.iter()].find((b) => b.title === BOOK_TITLE),
     'the book',
   );
   console.log(`book ${book.bookId}: ${book.title}`);
@@ -333,7 +418,7 @@ async function main() {
     });
     const chapter = await waitFor(
       () =>
-        [...conn.db.chapters.iter()].find(
+        [...conn.db.visibleChapters.iter()].find(
           (c) => c.bookId === book.bookId && c.title === spec.title,
         ),
       `chapter "${spec.title}"`,
@@ -366,12 +451,13 @@ async function main() {
   await conn.reducers.publishBook({ bookId: book.bookId });
   await waitFor(
     () =>
-      [...conn.db.books.iter()].find(
+      [...conn.db.visibleBooks.iter()].find(
         (b) => b.bookId === book.bookId && b.status.tag === 'Published',
       ),
     'the book to be published',
   );
   console.log(`published "${BOOK_TITLE}"`);
+  await openToAnonymousReaders(conn, book.bookId);
 
   conn.disconnect();
 }

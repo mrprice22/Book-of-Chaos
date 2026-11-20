@@ -11,8 +11,6 @@ import {
 } from "spacetimedb";
 
 export default __t.row({
-  optionId: __t.u64().primaryKey().name("option_id"),
-  questionId: __t.u64().name("question_id"),
-  textHtml: __t.string().name("text_html"),
-  position: __t.u32(),
+  blockId: __t.u64().name("block_id"),
+  passThreshold: __t.u32().name("pass_threshold"),
 });

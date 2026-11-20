@@ -2,6 +2,7 @@ import { useReducer, useSpacetimeDB, useTable } from 'spacetimedb/react';
 import { t } from '../i18n';
 import { reducers, tables } from '../module_bindings';
 import { AUTHOR_PATH, navigate } from '../routing/route';
+import { AnonymousAccess } from './AnonymousAccess';
 import { ChapterEditor } from './ChapterEditor';
 import { ChapterForm } from './ChapterForm';
 import { PublishPanel } from './PublishPanel';
@@ -10,13 +11,13 @@ import { useAction } from './useAction';
 /** One book's chapters, with the forms that add to it. */
 export function AuthorBookScreen({ bookId }: { bookId: bigint }) {
   const { identity } = useSpacetimeDB();
-  const [books, booksReady] = useTable(tables.books);
-  const [chapters] = useTable(tables.chapters);
-  const [blocks] = useTable(tables.knowledgeBlocks);
-  const [deps] = useTable(tables.chapterDeps);
+  const [books, booksReady] = useTable(tables.visibleBooks);
+  const [chapters] = useTable(tables.visibleChapters);
+  const [blocks] = useTable(tables.visibleBlocks);
+  const [deps] = useTable(tables.visibleChapterDeps);
   // Only to tell an author their quiz block already has a quiz to replace; the
   // answer key is not readable from any client, this one included.
-  const [quizQuestions] = useTable(tables.quizQuestions);
+  const [quizQuestions] = useTable(tables.visibleQuizQuestions);
 
   const createChapter = useReducer(reducers.createChapter);
   const publishBook = useReducer(reducers.publishBook);
@@ -24,6 +25,10 @@ export function AuthorBookScreen({ bookId }: { bookId: bigint }) {
     createChapter(draft),
   );
   const publishAction = useAction(() => publishBook({ bookId }));
+  const setAnonymousAccess = useReducer(reducers.setAnonymousAccess);
+  const accessAction = useAction((enabled: boolean) =>
+    setAnonymousAccess({ bookId, enabled }),
+  );
 
   const book = books.find((b) => b.bookId === bookId);
   const isOwner =
@@ -68,6 +73,13 @@ export function AuthorBookScreen({ bookId }: { bookId: bigint }) {
         onPublish={() => publishAction.run(undefined)}
         pending={publishAction.pending}
         error={publishAction.error}
+      />
+      <AnonymousAccess
+        enabled={book.anonymousAccess}
+        published={book.status.tag === 'Published'}
+        onChange={(enabled) => accessAction.run(enabled)}
+        pending={accessAction.pending}
+        error={accessAction.error}
       />
 
       <ChapterForm

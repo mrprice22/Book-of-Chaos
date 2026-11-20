@@ -11,7 +11,7 @@ import {
 } from "spacetimedb";
 
 export default __t.row({
-  questionId: __t.u64().primaryKey().name("question_id"),
+  questionId: __t.u64().name("question_id"),
   blockId: __t.u64().name("block_id"),
   promptHtml: __t.string().name("prompt_html"),
   position: __t.u32(),

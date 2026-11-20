@@ -96,7 +96,7 @@ the host.
 ./scripts/verify.sh
 ```
 
-Expect `VERIFY GREEN  16 ran, 0 skipped`.
+Expect `VERIFY GREEN  17 ran, 0 skipped`.
 
 If `preflight` FAILs, stop and read it: it means the toolchain does not match the pins
 in `scripts/toolchain-versions.sh`, and every stage after it would be testing something
@@ -327,6 +327,7 @@ Ctrl-C in the terminal running `deploy.sh`.
 | Client stuck on *Connecting…* | `.devhome/logs/spacetime.log`; is port 3000 up? |
 | Landing page says no book is published | Re-run `./scripts/deploy.sh local` (the seed is idempotent) |
 | Seed stops with *was seeded before the quiz block existed* | The local database predates v0.2. `./scripts/deploy.sh local --clear` |
+| Seed stops with *is closed to anonymous readers* | The demo book predates M15.3 and an anonymous seed owns it. `./scripts/deploy.sh local --clear` |
 | Map area blank or *could not be drawn* | Browser console — a Mermaid parse error means a chapter title broke the source builder |
 | A reducer rejection you cannot explain | The message is the server's own; grep `server/src/rules.rs` for it |
 | Ports still busy after Ctrl-C | `./scripts/dev.sh run 'fuser -k 3000/tcp; fuser -k 5173/tcp'` |

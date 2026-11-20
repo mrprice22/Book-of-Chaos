@@ -46,6 +46,7 @@ export default defineConfig({
     { name: 'answer-key', testMatch: /answer-key\.spec\.ts$/ },
     { name: 'quiz-gate', testMatch: /quiz-gate\.spec\.ts$/ },
     { name: 'identity-link', testMatch: /identity-link\.spec\.ts$/ },
+    { name: 'anonymous', testMatch: /anonymous\.spec\.ts$/ },
   ],
 
   webServer: {

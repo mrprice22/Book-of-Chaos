@@ -44,25 +44,25 @@ describe('BookMap', () => {
   });
 
   it('says a book with no chapters has none', () => {
-    sdk.rows = { chapters: [aChapter({ bookId: 2n })] };
+    sdk.rows = { visibleChapters: [aChapter({ bookId: 2n })] };
     render(<BookMap bookId={1n} />);
     expect(screen.getByText(/no chapters/i)).toBeInTheDocument();
   });
 
   it('states every node from the reader’s own progress', async () => {
     sdk.rows = {
-      chapters: [
+      visibleChapters: [
         aChapter({ chapterId: 1n, bookId: 1n, title: 'One' }),
         aChapter({ chapterId: 2n, bookId: 1n, title: 'Two' }),
         aChapter({ chapterId: 3n, bookId: 1n, title: 'Three' }),
       ],
-      knowledgeBlocks: [
+      visibleBlocks: [
         aBlock({ blockId: 10n, chapterId: 1n }),
         aBlock({ blockId: 20n, chapterId: 2n }),
         aBlock({ blockId: 21n, chapterId: 2n }),
         aBlock({ blockId: 30n, chapterId: 3n }),
       ],
-      chapterDeps: [
+      visibleChapterDeps: [
         { depId: 1n, chapterId: 2n, dependsOnChapterId: 1n },
         { depId: 2n, chapterId: 3n, dependsOnChapterId: 2n },
       ],
@@ -84,15 +84,15 @@ describe('BookMap', () => {
 
   it('carries the author’s flags onto the nodes', async () => {
     sdk.rows = {
-      chapters: [
+      visibleChapters: [
         aChapter({ chapterId: 1n, bookId: 1n, title: 'Glossary', isPinned: true }),
         aChapter({ chapterId: 2n, bookId: 1n, title: 'Aside', isOptional: true }),
       ],
-      knowledgeBlocks: [
+      visibleBlocks: [
         aBlock({ blockId: 10n, chapterId: 1n }),
         aBlock({ blockId: 20n, chapterId: 2n }),
       ],
-      chapterDeps: [],
+      visibleChapterDeps: [],
       readerProgress: [],
     };
 
@@ -105,12 +105,12 @@ describe('BookMap', () => {
 
   it('leaves another book’s chapters off the map', async () => {
     sdk.rows = {
-      chapters: [
+      visibleChapters: [
         aChapter({ chapterId: 1n, bookId: 1n, title: 'Mine' }),
         aChapter({ chapterId: 9n, bookId: 2n, title: 'Theirs' }),
       ],
-      knowledgeBlocks: [],
-      chapterDeps: [],
+      visibleBlocks: [],
+      visibleChapterDeps: [],
       readerProgress: [],
     };
 
@@ -137,9 +137,9 @@ describe('BookMap live updates', () => {
     mermaidMock.render.mockClear();
     sdk.ready = true;
     sdk.rows = {
-      chapters,
-      knowledgeBlocks: blocks,
-      chapterDeps: deps,
+      visibleChapters: chapters,
+      visibleBlocks: blocks,
+      visibleChapterDeps: deps,
       readerProgress: [],
     };
   });
@@ -166,7 +166,7 @@ describe('BookMap live updates', () => {
     // that is the point: the gate moved to the server, not into the map.
     sdk.rows = {
       ...sdk.rows,
-      knowledgeBlocks: [
+      visibleBlocks: [
         aBlock({ blockId: 10n, chapterId: 1n, blockType: { tag: 'Quiz' } }),
         aBlock({ blockId: 20n, chapterId: 2n }),
       ],
@@ -191,7 +191,10 @@ describe('BookMap live updates', () => {
 
     sdk.rows = {
       ...sdk.rows,
-      chapters: [...chapters, aChapter({ chapterId: 3n, bookId: 1n, title: 'Three' })],
+      visibleChapters: [
+        ...chapters,
+        aChapter({ chapterId: 3n, bookId: 1n, title: 'Three' }),
+      ],
     };
     rerender(<BookMap bookId={1n} />);
 

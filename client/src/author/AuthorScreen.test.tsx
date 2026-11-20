@@ -28,7 +28,7 @@ describe('AuthorScreen', () => {
     window.history.pushState({}, '', '/author');
     sdk.ready = true;
     sdk.createBook = vi.fn(() => Promise.resolve());
-    sdk.rows = { books: [] };
+    sdk.rows = { visibleBooks: [] };
   });
 
   it('says so before there is anything to list', () => {
@@ -38,7 +38,7 @@ describe('AuthorScreen', () => {
 
   it('lists only the caller’s own books', () => {
     sdk.rows = {
-      books: [
+      visibleBooks: [
         aBook({ bookId: 1n, title: 'Mine', owner: ME }),
         aBook({ bookId: 2n, title: 'Theirs', owner: SOMEONE_ELSE }),
       ],
@@ -64,7 +64,7 @@ describe('AuthorScreen', () => {
   });
 
   it('opens a book for editing', async () => {
-    sdk.rows = { books: [aBook({ bookId: 7n, title: 'Mine', owner: ME })] };
+    sdk.rows = { visibleBooks: [aBook({ bookId: 7n, title: 'Mine', owner: ME })] };
     render(<AuthorScreen />);
     await userEvent.click(screen.getByRole('button', { name: 'Mine' }));
     await waitFor(() => expect(window.location.pathname).toBe('/author/book/7'));
@@ -72,6 +72,6 @@ describe('AuthorScreen', () => {
 
   it('reads books from the books table', async () => {
     const { tables } = await import('../module_bindings');
-    expect(getQueryAccessorName(tables.books)).toBe('books');
+    expect(getQueryAccessorName(tables.visibleBooks)).toBe('visibleBooks');
   });
 });

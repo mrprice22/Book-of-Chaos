@@ -36,7 +36,7 @@ interface Caller {
 
 let trusted: MockIssuer;
 let untrusted: MockIssuer;
-/** An anonymous connection subscribed to everything, to read the results. */
+/** A signed-in connection subscribed to everything, to read the results. */
 let observer: Caller;
 const opened: DbConnection[] = [];
 const run = Date.now().toString(36);
@@ -110,7 +110,7 @@ function rowsOf(identity: Caller['identity']) {
   const db = observer.conn.db;
   return {
     users: [...db.users.iter()].filter((r) => hex(r.identity) === id),
-    books: [...db.books.iter()].filter((r) => hex(r.owner) === id),
+    books: [...db.visibleBooks.iter()].filter((r) => hex(r.owner) === id),
     progress: [...db.readerProgress.iter()].filter((r) => hex(r.identity) === id),
     attempts: [...db.quizAttempts.iter()].filter((r) => hex(r.identity) === id),
   };
@@ -119,7 +119,8 @@ function rowsOf(identity: Caller['identity']) {
 test.beforeAll(async () => {
   trusted = await startIssuer(TRUSTED_PORT);
   untrusted = await startIssuer(UNTRUSTED_PORT);
-  observer = await connect();
+  // Signed in, so it reads every book (M15.3); an anonymous observer would see none of them.
+  observer = await signedIn();
   await new Promise<void>((resolve) => {
     observer.conn.subscriptionBuilder().onApplied(() => resolve()).subscribeToAllTables();
   });
@@ -139,7 +140,7 @@ test('a signed-in identity takes every row the anonymous one held', async () => 
   const title = `Carried over ${run}`;
   await a.createBook({ title, description: 'Owned before signing in.' });
   const book = await waitFor(
-    () => [...observer.conn.db.books.iter()].find((b) => b.title === title),
+    () => [...observer.conn.db.visibleBooks.iter()].find((b) => b.title === title),
     'the book',
   );
   await a.createChapter({
@@ -150,7 +151,7 @@ test('a signed-in identity takes every row the anonymous one held', async () => 
     isPinned: false,
   });
   const chapter = await waitFor(
-    () => [...observer.conn.db.chapters.iter()].find((c) => c.bookId === book.bookId),
+    () => [...observer.conn.db.visibleChapters.iter()].find((c) => c.bookId === book.bookId),
     'the chapter',
   );
   const blockIn = async (blockTitle: string, kind: 'Reading' | 'Quiz') => {
@@ -164,7 +165,7 @@ test('a signed-in identity takes every row the anonymous one held', async () => 
     });
     const block = await waitFor(
       () =>
-        [...observer.conn.db.knowledgeBlocks.iter()].find(
+        [...observer.conn.db.visibleBlocks.iter()].find(
           (b) => b.chapterId === chapter.chapterId && b.title === blockTitle,
         ),
       `block ${blockTitle}`,
@@ -235,7 +236,7 @@ test('an anonymous author with books but no username carries them over', async (
   const title = `No username ${run}`;
   await anon.conn.reducers.createBook({ title, description: 'Owned with no username.' });
   const book = await waitFor(
-    () => [...observer.conn.db.books.iter()].find((b) => b.title === title),
+    () => [...observer.conn.db.visibleBooks.iter()].find((b) => b.title === title),
     'the book',
   );
   expect(rowsOf(anon.identity).users).toEqual([]);

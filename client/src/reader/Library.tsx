@@ -15,9 +15,9 @@ import { summarizeBook } from './bookSummary';
  * "if the UI needs a reload to be correct, it is wrong" rule in CLAUDE.md.
  */
 export function Library() {
-  const [books, booksReady] = useTable(tables.books);
-  const [chapters, chaptersReady] = useTable(tables.chapters);
-  const [blocks, blocksReady] = useTable(tables.knowledgeBlocks);
+  const [books, booksReady] = useTable(tables.visibleBooks);
+  const [chapters, chaptersReady] = useTable(tables.visibleChapters);
+  const [blocks, blocksReady] = useTable(tables.visibleBlocks);
 
   if (!booksReady || !chaptersReady || !blocksReady) {
     return <p className="library-status">{t('book.loading')}</p>;

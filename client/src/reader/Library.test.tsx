@@ -30,14 +30,14 @@ vi.mock('mermaid', () => ({
 }));
 
 function seed(rows: {
-  books?: Book[];
-  chapters?: Chapter[];
-  knowledgeBlocks?: KnowledgeBlock[];
+  visibleBooks?: Book[];
+  visibleChapters?: Chapter[];
+  visibleBlocks?: KnowledgeBlock[];
 }) {
   sdk.rows = {
-    books: rows.books ?? [],
-    chapters: rows.chapters ?? [],
-    knowledgeBlocks: rows.knowledgeBlocks ?? [],
+    visibleBooks: rows.visibleBooks ?? [],
+    visibleChapters: rows.visibleChapters ?? [],
+    visibleBlocks: rows.visibleBlocks ?? [],
   };
 }
 
@@ -55,7 +55,9 @@ describe('Library', () => {
 
   it('says so when nothing is published', () => {
     seed({
-      books: [aBook({ bookId: 1n, title: 'Draft Book', status: { tag: 'Draft' } })],
+      visibleBooks: [
+        aBook({ bookId: 1n, title: 'Draft Book', status: { tag: 'Draft' } }),
+      ],
     });
     render(<Library />);
     expect(screen.getByText(/no book/i)).toBeInTheDocument();
@@ -63,11 +65,11 @@ describe('Library', () => {
 
   it('never shows a draft book to a reader', () => {
     seed({
-      books: [
+      visibleBooks: [
         aBook({ bookId: 1n, title: 'Draft Book', status: { tag: 'Draft' } }),
         aBook({ bookId: 2n, title: 'Published Book' }),
       ],
-      chapters: [aChapter({ chapterId: 10n, bookId: 2n })],
+      visibleChapters: [aChapter({ chapterId: 10n, bookId: 2n })],
     });
     render(<Library />);
     expect(screen.getByRole('heading', { name: 'Published Book' })).toBeInTheDocument();
@@ -76,8 +78,8 @@ describe('Library', () => {
 
   it('summarises the published book it lands on', () => {
     seed({
-      books: [aBook({ bookId: 3n, title: 'Chaos' })],
-      chapters: [
+      visibleBooks: [aBook({ bookId: 3n, title: 'Chaos' })],
+      visibleChapters: [
         aChapter({ chapterId: 10n, bookId: 3n }),
         aChapter({ chapterId: 11n, bookId: 3n }),
       ],
@@ -92,8 +94,8 @@ describe('the fake subscription', () => {
   // assertions above would quietly be testing the empty state instead.
   it('keys rows by the same accessor name the query builder uses', async () => {
     const { tables } = await import('../module_bindings');
-    expect(getQueryAccessorName(tables.books)).toBe('books');
-    expect(getQueryAccessorName(tables.chapters)).toBe('chapters');
-    expect(getQueryAccessorName(tables.knowledgeBlocks)).toBe('knowledgeBlocks');
+    expect(getQueryAccessorName(tables.visibleBooks)).toBe('visibleBooks');
+    expect(getQueryAccessorName(tables.visibleChapters)).toBe('visibleChapters');
+    expect(getQueryAccessorName(tables.visibleBlocks)).toBe('visibleBlocks');
   });
 });

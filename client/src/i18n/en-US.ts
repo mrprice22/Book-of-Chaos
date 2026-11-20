@@ -58,6 +58,8 @@ export const enUS = {
   'action.saveQuiz': 'Save quiz',
   'author.status.Draft': 'Draft — only you can see this book',
   'author.status.Published': 'Published — readers can see this book',
+  'author.anonymousAccess.label': 'Readers who are not signed in can read this book',
+  'author.anonymousAccess.draftNote': 'They will see it once the book is published.',
   'action.publish': 'Publish',
   'action.publishing': 'Publishing…',
   'author.prerequisites': 'Depends on',

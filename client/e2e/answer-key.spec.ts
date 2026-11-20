@@ -10,8 +10,8 @@
  * Two independent things are asserted, because they can fail independently:
  *
  * 1. **The bindings expose no way to ask.** `spacetime generate` emits a table
- *    accessor for every table in the *client's* view of the schema. `quiz_options`
- *    gets one; `quiz_answer_key` does not. Not a stale-file check, either: the
+ *    accessor for every table and view in the *client's* view of the schema.
+ *    `visible_quiz_options` gets one; `quiz_answer_key` does not. Not a stale-file check, either: the
  *    `webServer` these tests run against is `deploy.sh local`, which regenerates the
  *    bindings from the module it publishes, so `conn.db` reflects the schema that is
  *    actually running.
@@ -19,8 +19,8 @@
  * 2. **The server refuses to be asked anyway.** Point 1 is about generated code, and
  *    generated code can be worked around by writing the SQL by hand. So a raw
  *    subscription naming the table is issued directly, and must be refused. The
- *    positive control is the same subscription against `quiz_options`, which must
- *    apply — without it, this test would pass just as happily if the database were
+ *    positive control is the same subscription against `visible_quiz_options`, which
+ *    must apply — without it, this test would pass just as happily if the database were
  *    down, the module unpublished, or the query malformed.
  *
  * Both were watched failing before being trusted, per M9's rule that a test which has
@@ -44,27 +44,33 @@
  * a Playwright test only to reuse the one `webServer` that brings the stack up.
  */
 import { test, expect } from '@playwright/test';
-import { DbConnection } from '../src/module_bindings';
+import type { DbConnection } from '../src/module_bindings';
+import type { MockIssuer } from './support/mockIssuer';
+import { connectSignedIn, startTrustedIssuer } from './support/signIn';
 
-const URI = process.env.SPACETIME_URI ?? 'ws://localhost:3000';
-const DB_NAME = process.env.SPACETIME_DB_NAME ?? 'book-of-chaos';
+/** The trusted mock issuer, so callers are signed in and may write (M15.3). */
+let issuer: MockIssuer;
 
 /** The private table. Named as the server names it, because that is what SQL takes. */
 const ANSWER_KEY_TABLE = 'quiz_answer_key';
-/** Its public sibling — same shape of query, same connection kind, opposite verdict. */
-const PUBLIC_TABLE = 'quiz_options';
+/**
+ * Its public sibling — same shape of query, same connection kind, opposite verdict.
+ * Since M15.3 the options table is private too, and readers reach it through this view.
+ */
+const PUBLIC_TABLE = 'visible_quiz_options';
 
-function connect(): Promise<DbConnection> {
-  return new Promise((resolve, reject) => {
-    DbConnection.builder()
-      .withUri(URI)
-      .withDatabaseName(DB_NAME)
-      .onConnect((c) => resolve(c))
-      .onConnectError((_ctx, error) => reject(error))
-      .build();
-    setTimeout(() => reject(new Error(`Timed out connecting to ${URI}/${DB_NAME}`)), 15_000);
-  });
+/** A new signed-in identity (`support/signIn.ts`). */
+async function connect(): Promise<DbConnection> {
+  return (await connectSignedIn(issuer)).conn;
 }
+
+test.beforeAll(async () => {
+  issuer = await startTrustedIssuer();
+});
+
+test.afterAll(async () => {
+  await issuer.close();
+});
 
 type Outcome =
   | { tag: 'applied' }
@@ -103,7 +109,7 @@ test('the generated bindings expose the public quiz tables', async () => {
   const conn = await connect();
   try {
     expect(Object.keys(conn.db)).toEqual(
-      expect.arrayContaining(['quizConfig', 'quizQuestions', 'quizOptions']),
+      expect.arrayContaining(['visibleQuizConfig', 'visibleQuizQuestions', 'visibleQuizOptions']),
     );
   } finally {
     conn.disconnect();
@@ -170,7 +176,7 @@ test('the answers to a real quiz cannot be found from the client', async () => {
       description: 'Created by the answer-key harness.',
     });
     const book = await waitFor(
-      () => [...conn.db.books.iter()].find((b) => b.title === title),
+      () => [...conn.db.visibleBooks.iter()].find((b) => b.title === title),
       'the control book',
     );
 
@@ -182,7 +188,7 @@ test('the answers to a real quiz cannot be found from the client', async () => {
       isPinned: false,
     });
     const chapter = await waitFor(
-      () => [...conn.db.chapters.iter()].find((c) => c.bookId === book.bookId),
+      () => [...conn.db.visibleChapters.iter()].find((c) => c.bookId === book.bookId),
       'the control chapter',
     );
 
@@ -195,7 +201,7 @@ test('the answers to a real quiz cannot be found from the client', async () => {
       isOptional: false,
     });
     const block = await waitFor(
-      () => [...conn.db.knowledgeBlocks.iter()].find((b) => b.chapterId === chapter.chapterId),
+      () => [...conn.db.visibleBlocks.iter()].find((b) => b.chapterId === chapter.chapterId),
       'the control quiz block',
     );
 
@@ -223,12 +229,12 @@ test('the answers to a real quiz cannot be found from the client', async () => {
     });
 
     const questions = await waitFor(() => {
-      const found = [...conn.db.quizQuestions.iter()].filter((q) => q.blockId === block.blockId);
+      const found = [...conn.db.visibleQuizQuestions.iter()].filter((q) => q.blockId === block.blockId);
       return found.length === 2 ? found : undefined;
     }, 'the two quiz questions');
 
     // The reader can read the quiz — otherwise there is nothing to take.
-    const options = [...conn.db.quizOptions.iter()].filter((o) =>
+    const options = [...conn.db.visibleQuizOptions.iter()].filter((o) =>
       questions.some((q) => q.questionId === o.questionId),
     );
     expect(options).toHaveLength(6);

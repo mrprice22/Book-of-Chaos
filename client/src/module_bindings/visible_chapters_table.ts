@@ -9,22 +9,15 @@ import {
   type AlgebraicTypeType as __AlgebraicTypeType,
   type Infer as __Infer,
 } from "spacetimedb";
-import {
-  BlockType,
-} from "./types";
-
 
 export default __t.row({
-  blockId: __t.u64().primaryKey().name("block_id"),
   chapterId: __t.u64().name("chapter_id"),
+  bookId: __t.u64().name("book_id"),
   title: __t.string(),
-  get blockType() {
-    return BlockType.name("block_type");
-  },
-  bodyHtml: __t.string().name("body_html"),
-  url: __t.option(__t.string()),
+  description: __t.string(),
   position: __t.u32(),
   isOptional: __t.bool().name("is_optional"),
+  isPinned: __t.bool().name("is_pinned"),
   locale: __t.option(__t.string()),
   createdAt: __t.timestamp().name("created_at"),
   updatedAt: __t.timestamp().name("updated_at"),

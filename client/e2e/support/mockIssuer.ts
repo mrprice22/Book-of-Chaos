@@ -53,13 +53,16 @@ function signingKey(port: number): KeyObject {
   }
 }
 
-export function startIssuer(port: number): Promise<MockIssuer> {
+/**
+ * Mint tokens for the issuer on `port` without serving anything. Its key is the one
+ * `startIssuer(port)` serves, so these tokens are valid wherever an issuer on that
+ * port is listening, in this process or another.
+ */
+export function createMinter(port: number): (options: MintOptions) => string {
   const issuer = `http://127.0.0.1:${port}`;
   const kid = `e2e-key-${port}`;
   const privateKey = signingKey(port);
-  const publicKey = createPublicKey(privateKey);
-
-  const mint = ({ sub, aud, emailVerified }: MintOptions): string => {
+  return ({ sub, aud, emailVerified }: MintOptions): string => {
     const now = Math.floor(Date.now() / 1000);
     const claims: Record<string, unknown> = { iss: issuer, sub, aud, iat: now, exp: now + 3600 };
     if (emailVerified !== undefined) {
@@ -72,6 +75,13 @@ export function startIssuer(port: number): Promise<MockIssuer> {
     signer.update(`${header}.${payload}`);
     return `${header}.${payload}.${signer.sign(privateKey).toString('base64url')}`;
   };
+}
+
+export function startIssuer(port: number): Promise<MockIssuer> {
+  const issuer = `http://127.0.0.1:${port}`;
+  const kid = `e2e-key-${port}`;
+  const publicKey = createPublicKey(signingKey(port));
+  const mint = createMinter(port);
 
   const server: Server = createServer((req, res) => {
     const json = (body: unknown) => {

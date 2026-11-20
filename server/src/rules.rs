@@ -192,6 +192,22 @@ pub fn require_owner(is_owner: bool) -> Result<(), String> {
     }
 }
 
+/// Pure: may this caller read this book (M15.3)? The reading views apply it.
+///
+/// A signed-in reader reads every book, as in v0.2. A caller who is not signed in
+/// reads only the published books whose owner turned on anonymous access, plus any
+/// book it owns. That last clause is for an author whose books predate sign-in: they
+/// are anonymous until they sign in and carry them over (M15.2), and hiding their own
+/// books from them would look like losing them.
+pub fn can_read_book(
+    signed_in: bool,
+    is_owner: bool,
+    anonymous_access: bool,
+    published: bool,
+) -> bool {
+    signed_in || is_owner || (anonymous_access && published)
+}
+
 /// Owner check first, then inputs. Both halves in the order CLAUDE.md mandates.
 pub fn can_write_book(is_owner: bool, title: &str, description: &str) -> Result<(), String> {
     require_owner(is_owner)?;
@@ -763,6 +779,28 @@ pub fn grade_quiz(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_signed_in_reader_reads_every_book() {
+        assert!(can_read_book(true, false, false, false));
+        assert!(can_read_book(true, false, false, true));
+    }
+
+    #[test]
+    fn an_anonymous_reader_reads_only_published_books_open_to_anonymous_readers() {
+        assert!(can_read_book(false, false, true, true));
+        assert!(
+            !can_read_book(false, false, false, true),
+            "no anonymous access"
+        );
+        assert!(!can_read_book(false, false, true, false), "still a draft");
+        assert!(!can_read_book(false, false, false, false));
+    }
+
+    #[test]
+    fn an_anonymous_owner_still_reads_their_own_books() {
+        assert!(can_read_book(false, true, false, false));
+    }
     use crate::unlock::{BlockState, ChapterState};
 
     // --- Carry-over (M15.2) ---------------------------------------------------

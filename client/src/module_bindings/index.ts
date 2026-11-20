@@ -44,6 +44,7 @@ import CreateChapterReducer from "./create_chapter_reducer";
 import DeleteBlockReducer from "./delete_block_reducer";
 import PublishBookReducer from "./publish_book_reducer";
 import ReorderChaptersReducer from "./reorder_chapters_reducer";
+import SetAnonymousAccessReducer from "./set_anonymous_access_reducer";
 import SetBlockDepsReducer from "./set_block_deps_reducer";
 import SetChapterDepsReducer from "./set_chapter_deps_reducer";
 import SetQuizReducer from "./set_quiz_reducer";
@@ -55,99 +56,23 @@ import UpdateChapterReducer from "./update_chapter_reducer";
 // Import all procedure arg schemas
 
 // Import all table schema definitions
-import BlockDepsRow from "./block_deps_table";
-import BooksRow from "./books_table";
-import ChapterDepsRow from "./chapter_deps_table";
-import ChaptersRow from "./chapters_table";
-import KnowledgeBlocksRow from "./knowledge_blocks_table";
 import QuizAttemptResultsRow from "./quiz_attempt_results_table";
 import QuizAttemptsRow from "./quiz_attempts_table";
-import QuizConfigRow from "./quiz_config_table";
-import QuizOptionsRow from "./quiz_options_table";
-import QuizQuestionsRow from "./quiz_questions_table";
 import ReaderProgressRow from "./reader_progress_table";
 import UsersRow from "./users_table";
+import VisibleBlockDepsRow from "./visible_block_deps_table";
+import VisibleBlocksRow from "./visible_blocks_table";
+import VisibleBooksRow from "./visible_books_table";
+import VisibleChapterDepsRow from "./visible_chapter_deps_table";
+import VisibleChaptersRow from "./visible_chapters_table";
+import VisibleQuizConfigRow from "./visible_quiz_config_table";
+import VisibleQuizOptionsRow from "./visible_quiz_options_table";
+import VisibleQuizQuestionsRow from "./visible_quiz_questions_table";
 
 /** Type-only namespace exports for generated type groups. */
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
-  blockDeps: __table({
-    name: 'block_deps',
-    indexes: [
-      { accessor: 'block_id', name: 'block_deps_block_id_idx_btree', algorithm: 'btree', columns: [
-        'blockId',
-      ] },
-      { accessor: 'dep_id', name: 'block_deps_dep_id_idx_btree', algorithm: 'btree', columns: [
-        'depId',
-      ] },
-      { accessor: 'depends_on_block_id', name: 'block_deps_depends_on_block_id_idx_btree', algorithm: 'btree', columns: [
-        'dependsOnBlockId',
-      ] },
-    ],
-    constraints: [
-      { name: 'block_deps_dep_id_key', constraint: 'unique', columns: ['depId'] },
-    ],
-  }, BlockDepsRow),
-  books: __table({
-    name: 'books',
-    indexes: [
-      { accessor: 'book_id', name: 'books_book_id_idx_btree', algorithm: 'btree', columns: [
-        'bookId',
-      ] },
-      { accessor: 'owner', name: 'books_owner_idx_btree', algorithm: 'btree', columns: [
-        'owner',
-      ] },
-    ],
-    constraints: [
-      { name: 'books_book_id_key', constraint: 'unique', columns: ['bookId'] },
-    ],
-  }, BooksRow),
-  chapterDeps: __table({
-    name: 'chapter_deps',
-    indexes: [
-      { accessor: 'chapter_id', name: 'chapter_deps_chapter_id_idx_btree', algorithm: 'btree', columns: [
-        'chapterId',
-      ] },
-      { accessor: 'dep_id', name: 'chapter_deps_dep_id_idx_btree', algorithm: 'btree', columns: [
-        'depId',
-      ] },
-      { accessor: 'depends_on_chapter_id', name: 'chapter_deps_depends_on_chapter_id_idx_btree', algorithm: 'btree', columns: [
-        'dependsOnChapterId',
-      ] },
-    ],
-    constraints: [
-      { name: 'chapter_deps_dep_id_key', constraint: 'unique', columns: ['depId'] },
-    ],
-  }, ChapterDepsRow),
-  chapters: __table({
-    name: 'chapters',
-    indexes: [
-      { accessor: 'book_id', name: 'chapters_book_id_idx_btree', algorithm: 'btree', columns: [
-        'bookId',
-      ] },
-      { accessor: 'chapter_id', name: 'chapters_chapter_id_idx_btree', algorithm: 'btree', columns: [
-        'chapterId',
-      ] },
-    ],
-    constraints: [
-      { name: 'chapters_chapter_id_key', constraint: 'unique', columns: ['chapterId'] },
-    ],
-  }, ChaptersRow),
-  knowledgeBlocks: __table({
-    name: 'knowledge_blocks',
-    indexes: [
-      { accessor: 'block_id', name: 'knowledge_blocks_block_id_idx_btree', algorithm: 'btree', columns: [
-        'blockId',
-      ] },
-      { accessor: 'chapter_id', name: 'knowledge_blocks_chapter_id_idx_btree', algorithm: 'btree', columns: [
-        'chapterId',
-      ] },
-    ],
-    constraints: [
-      { name: 'knowledge_blocks_block_id_key', constraint: 'unique', columns: ['blockId'] },
-    ],
-  }, KnowledgeBlocksRow),
   quizAttemptResults: __table({
     name: 'quiz_attempt_results',
     indexes: [
@@ -182,45 +107,6 @@ const tablesSchema = __schema({
       { name: 'quiz_attempts_attempt_id_key', constraint: 'unique', columns: ['attemptId'] },
     ],
   }, QuizAttemptsRow),
-  quizConfig: __table({
-    name: 'quiz_config',
-    indexes: [
-      { accessor: 'block_id', name: 'quiz_config_block_id_idx_btree', algorithm: 'btree', columns: [
-        'blockId',
-      ] },
-    ],
-    constraints: [
-      { name: 'quiz_config_block_id_key', constraint: 'unique', columns: ['blockId'] },
-    ],
-  }, QuizConfigRow),
-  quizOptions: __table({
-    name: 'quiz_options',
-    indexes: [
-      { accessor: 'option_id', name: 'quiz_options_option_id_idx_btree', algorithm: 'btree', columns: [
-        'optionId',
-      ] },
-      { accessor: 'question_id', name: 'quiz_options_question_id_idx_btree', algorithm: 'btree', columns: [
-        'questionId',
-      ] },
-    ],
-    constraints: [
-      { name: 'quiz_options_option_id_key', constraint: 'unique', columns: ['optionId'] },
-    ],
-  }, QuizOptionsRow),
-  quizQuestions: __table({
-    name: 'quiz_questions',
-    indexes: [
-      { accessor: 'block_id', name: 'quiz_questions_block_id_idx_btree', algorithm: 'btree', columns: [
-        'blockId',
-      ] },
-      { accessor: 'question_id', name: 'quiz_questions_question_id_idx_btree', algorithm: 'btree', columns: [
-        'questionId',
-      ] },
-    ],
-    constraints: [
-      { name: 'quiz_questions_question_id_key', constraint: 'unique', columns: ['questionId'] },
-    ],
-  }, QuizQuestionsRow),
   readerProgress: __table({
     name: 'reader_progress',
     indexes: [
@@ -253,6 +139,62 @@ const tablesSchema = __schema({
       { name: 'users_username_key', constraint: 'unique', columns: ['username'] },
     ],
   }, UsersRow),
+  visibleBlockDeps: __table({
+    name: 'visible_block_deps',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, VisibleBlockDepsRow),
+  visibleBlocks: __table({
+    name: 'visible_blocks',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, VisibleBlocksRow),
+  visibleBooks: __table({
+    name: 'visible_books',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, VisibleBooksRow),
+  visibleChapterDeps: __table({
+    name: 'visible_chapter_deps',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, VisibleChapterDepsRow),
+  visibleChapters: __table({
+    name: 'visible_chapters',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, VisibleChaptersRow),
+  visibleQuizConfig: __table({
+    name: 'visible_quiz_config',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, VisibleQuizConfigRow),
+  visibleQuizOptions: __table({
+    name: 'visible_quiz_options',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, VisibleQuizOptionsRow),
+  visibleQuizQuestions: __table({
+    name: 'visible_quiz_questions',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, VisibleQuizQuestionsRow),
 });
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
@@ -267,6 +209,7 @@ const reducersSchema = __reducers(
   __reducerSchema("delete_block", DeleteBlockReducer),
   __reducerSchema("publish_book", PublishBookReducer),
   __reducerSchema("reorder_chapters", ReorderChaptersReducer),
+  __reducerSchema("set_anonymous_access", SetAnonymousAccessReducer),
   __reducerSchema("set_block_deps", SetBlockDepsReducer),
   __reducerSchema("set_chapter_deps", SetChapterDepsReducer),
   __reducerSchema("set_quiz", SetQuizReducer),
@@ -282,24 +225,28 @@ const proceduresSchema = __procedures(
 
 type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "tables"> & {
   tables: typeof tablesSchema.schemaType.tables & {
-    /** @deprecated Use `blockDeps` instead. This alias will be removed in the next major version. */
-    readonly "block_deps": Omit<typeof tablesSchema.schemaType.tables["blockDeps"], "accessorName"> & { readonly accessorName: "block_deps" };
-    /** @deprecated Use `chapterDeps` instead. This alias will be removed in the next major version. */
-    readonly "chapter_deps": Omit<typeof tablesSchema.schemaType.tables["chapterDeps"], "accessorName"> & { readonly accessorName: "chapter_deps" };
-    /** @deprecated Use `knowledgeBlocks` instead. This alias will be removed in the next major version. */
-    readonly "knowledge_blocks": Omit<typeof tablesSchema.schemaType.tables["knowledgeBlocks"], "accessorName"> & { readonly accessorName: "knowledge_blocks" };
     /** @deprecated Use `quizAttemptResults` instead. This alias will be removed in the next major version. */
     readonly "quiz_attempt_results": Omit<typeof tablesSchema.schemaType.tables["quizAttemptResults"], "accessorName"> & { readonly accessorName: "quiz_attempt_results" };
     /** @deprecated Use `quizAttempts` instead. This alias will be removed in the next major version. */
     readonly "quiz_attempts": Omit<typeof tablesSchema.schemaType.tables["quizAttempts"], "accessorName"> & { readonly accessorName: "quiz_attempts" };
-    /** @deprecated Use `quizConfig` instead. This alias will be removed in the next major version. */
-    readonly "quiz_config": Omit<typeof tablesSchema.schemaType.tables["quizConfig"], "accessorName"> & { readonly accessorName: "quiz_config" };
-    /** @deprecated Use `quizOptions` instead. This alias will be removed in the next major version. */
-    readonly "quiz_options": Omit<typeof tablesSchema.schemaType.tables["quizOptions"], "accessorName"> & { readonly accessorName: "quiz_options" };
-    /** @deprecated Use `quizQuestions` instead. This alias will be removed in the next major version. */
-    readonly "quiz_questions": Omit<typeof tablesSchema.schemaType.tables["quizQuestions"], "accessorName"> & { readonly accessorName: "quiz_questions" };
     /** @deprecated Use `readerProgress` instead. This alias will be removed in the next major version. */
     readonly "reader_progress": Omit<typeof tablesSchema.schemaType.tables["readerProgress"], "accessorName"> & { readonly accessorName: "reader_progress" };
+    /** @deprecated Use `visibleBlockDeps` instead. This alias will be removed in the next major version. */
+    readonly "visible_block_deps": Omit<typeof tablesSchema.schemaType.tables["visibleBlockDeps"], "accessorName"> & { readonly accessorName: "visible_block_deps" };
+    /** @deprecated Use `visibleBlocks` instead. This alias will be removed in the next major version. */
+    readonly "visible_blocks": Omit<typeof tablesSchema.schemaType.tables["visibleBlocks"], "accessorName"> & { readonly accessorName: "visible_blocks" };
+    /** @deprecated Use `visibleBooks` instead. This alias will be removed in the next major version. */
+    readonly "visible_books": Omit<typeof tablesSchema.schemaType.tables["visibleBooks"], "accessorName"> & { readonly accessorName: "visible_books" };
+    /** @deprecated Use `visibleChapterDeps` instead. This alias will be removed in the next major version. */
+    readonly "visible_chapter_deps": Omit<typeof tablesSchema.schemaType.tables["visibleChapterDeps"], "accessorName"> & { readonly accessorName: "visible_chapter_deps" };
+    /** @deprecated Use `visibleChapters` instead. This alias will be removed in the next major version. */
+    readonly "visible_chapters": Omit<typeof tablesSchema.schemaType.tables["visibleChapters"], "accessorName"> & { readonly accessorName: "visible_chapters" };
+    /** @deprecated Use `visibleQuizConfig` instead. This alias will be removed in the next major version. */
+    readonly "visible_quiz_config": Omit<typeof tablesSchema.schemaType.tables["visibleQuizConfig"], "accessorName"> & { readonly accessorName: "visible_quiz_config" };
+    /** @deprecated Use `visibleQuizOptions` instead. This alias will be removed in the next major version. */
+    readonly "visible_quiz_options": Omit<typeof tablesSchema.schemaType.tables["visibleQuizOptions"], "accessorName"> & { readonly accessorName: "visible_quiz_options" };
+    /** @deprecated Use `visibleQuizQuestions` instead. This alias will be removed in the next major version. */
+    readonly "visible_quiz_questions": Omit<typeof tablesSchema.schemaType.tables["visibleQuizQuestions"], "accessorName"> & { readonly accessorName: "visible_quiz_questions" };
   };
 };
 
@@ -318,15 +265,17 @@ const REMOTE_MODULE = {
 >;
 
 const tableAccessorAliases = {
-  "block_deps": "blockDeps",
-  "chapter_deps": "chapterDeps",
-  "knowledge_blocks": "knowledgeBlocks",
   "quiz_attempt_results": "quizAttemptResults",
   "quiz_attempts": "quizAttempts",
-  "quiz_config": "quizConfig",
-  "quiz_options": "quizOptions",
-  "quiz_questions": "quizQuestions",
   "reader_progress": "readerProgress",
+  "visible_block_deps": "visibleBlockDeps",
+  "visible_blocks": "visibleBlocks",
+  "visible_books": "visibleBooks",
+  "visible_chapter_deps": "visibleChapterDeps",
+  "visible_chapters": "visibleChapters",
+  "visible_quiz_config": "visibleQuizConfig",
+  "visible_quiz_options": "visibleQuizOptions",
+  "visible_quiz_questions": "visibleQuizQuestions",
 } as const;
 
 function __withTableAccessorAliases<T extends object>(target: T, freeze = false): T {
@@ -347,46 +296,54 @@ function __withTableAccessorAliases<T extends object>(target: T, freeze = false)
 
 type __DbViewBase = __DbConnectionImpl<typeof REMOTE_MODULE>["db"];
 export type DbView = __DbViewBase & {
-  /** @deprecated Use `blockDeps` instead. This alias will be removed in the next major version. */
-  readonly "block_deps": __DbViewBase["blockDeps"];
-  /** @deprecated Use `chapterDeps` instead. This alias will be removed in the next major version. */
-  readonly "chapter_deps": __DbViewBase["chapterDeps"];
-  /** @deprecated Use `knowledgeBlocks` instead. This alias will be removed in the next major version. */
-  readonly "knowledge_blocks": __DbViewBase["knowledgeBlocks"];
   /** @deprecated Use `quizAttemptResults` instead. This alias will be removed in the next major version. */
   readonly "quiz_attempt_results": __DbViewBase["quizAttemptResults"];
   /** @deprecated Use `quizAttempts` instead. This alias will be removed in the next major version. */
   readonly "quiz_attempts": __DbViewBase["quizAttempts"];
-  /** @deprecated Use `quizConfig` instead. This alias will be removed in the next major version. */
-  readonly "quiz_config": __DbViewBase["quizConfig"];
-  /** @deprecated Use `quizOptions` instead. This alias will be removed in the next major version. */
-  readonly "quiz_options": __DbViewBase["quizOptions"];
-  /** @deprecated Use `quizQuestions` instead. This alias will be removed in the next major version. */
-  readonly "quiz_questions": __DbViewBase["quizQuestions"];
   /** @deprecated Use `readerProgress` instead. This alias will be removed in the next major version. */
   readonly "reader_progress": __DbViewBase["readerProgress"];
+  /** @deprecated Use `visibleBlockDeps` instead. This alias will be removed in the next major version. */
+  readonly "visible_block_deps": __DbViewBase["visibleBlockDeps"];
+  /** @deprecated Use `visibleBlocks` instead. This alias will be removed in the next major version. */
+  readonly "visible_blocks": __DbViewBase["visibleBlocks"];
+  /** @deprecated Use `visibleBooks` instead. This alias will be removed in the next major version. */
+  readonly "visible_books": __DbViewBase["visibleBooks"];
+  /** @deprecated Use `visibleChapterDeps` instead. This alias will be removed in the next major version. */
+  readonly "visible_chapter_deps": __DbViewBase["visibleChapterDeps"];
+  /** @deprecated Use `visibleChapters` instead. This alias will be removed in the next major version. */
+  readonly "visible_chapters": __DbViewBase["visibleChapters"];
+  /** @deprecated Use `visibleQuizConfig` instead. This alias will be removed in the next major version. */
+  readonly "visible_quiz_config": __DbViewBase["visibleQuizConfig"];
+  /** @deprecated Use `visibleQuizOptions` instead. This alias will be removed in the next major version. */
+  readonly "visible_quiz_options": __DbViewBase["visibleQuizOptions"];
+  /** @deprecated Use `visibleQuizQuestions` instead. This alias will be removed in the next major version. */
+  readonly "visible_quiz_questions": __DbViewBase["visibleQuizQuestions"];
 };
 
 type __TablesBase = __QueryBuilder<typeof tablesSchema.schemaType>;
 export type Tables = __TablesBase & {
-  /** @deprecated Use `blockDeps` instead. This alias will be removed in the next major version. */
-  readonly "block_deps": __TablesBase["blockDeps"];
-  /** @deprecated Use `chapterDeps` instead. This alias will be removed in the next major version. */
-  readonly "chapter_deps": __TablesBase["chapterDeps"];
-  /** @deprecated Use `knowledgeBlocks` instead. This alias will be removed in the next major version. */
-  readonly "knowledge_blocks": __TablesBase["knowledgeBlocks"];
   /** @deprecated Use `quizAttemptResults` instead. This alias will be removed in the next major version. */
   readonly "quiz_attempt_results": __TablesBase["quizAttemptResults"];
   /** @deprecated Use `quizAttempts` instead. This alias will be removed in the next major version. */
   readonly "quiz_attempts": __TablesBase["quizAttempts"];
-  /** @deprecated Use `quizConfig` instead. This alias will be removed in the next major version. */
-  readonly "quiz_config": __TablesBase["quizConfig"];
-  /** @deprecated Use `quizOptions` instead. This alias will be removed in the next major version. */
-  readonly "quiz_options": __TablesBase["quizOptions"];
-  /** @deprecated Use `quizQuestions` instead. This alias will be removed in the next major version. */
-  readonly "quiz_questions": __TablesBase["quizQuestions"];
   /** @deprecated Use `readerProgress` instead. This alias will be removed in the next major version. */
   readonly "reader_progress": __TablesBase["readerProgress"];
+  /** @deprecated Use `visibleBlockDeps` instead. This alias will be removed in the next major version. */
+  readonly "visible_block_deps": __TablesBase["visibleBlockDeps"];
+  /** @deprecated Use `visibleBlocks` instead. This alias will be removed in the next major version. */
+  readonly "visible_blocks": __TablesBase["visibleBlocks"];
+  /** @deprecated Use `visibleBooks` instead. This alias will be removed in the next major version. */
+  readonly "visible_books": __TablesBase["visibleBooks"];
+  /** @deprecated Use `visibleChapterDeps` instead. This alias will be removed in the next major version. */
+  readonly "visible_chapter_deps": __TablesBase["visibleChapterDeps"];
+  /** @deprecated Use `visibleChapters` instead. This alias will be removed in the next major version. */
+  readonly "visible_chapters": __TablesBase["visibleChapters"];
+  /** @deprecated Use `visibleQuizConfig` instead. This alias will be removed in the next major version. */
+  readonly "visible_quiz_config": __TablesBase["visibleQuizConfig"];
+  /** @deprecated Use `visibleQuizOptions` instead. This alias will be removed in the next major version. */
+  readonly "visible_quiz_options": __TablesBase["visibleQuizOptions"];
+  /** @deprecated Use `visibleQuizQuestions` instead. This alias will be removed in the next major version. */
+  readonly "visible_quiz_questions": __TablesBase["visibleQuizQuestions"];
 };
 
 /** The tables available in this remote SpacetimeDB module. Each table reference doubles as a query builder. */

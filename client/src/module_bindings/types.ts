@@ -36,6 +36,7 @@ export const Book = __t.object("Book", {
   locale: __t.option(__t.string()),
   createdAt: __t.timestamp(),
   updatedAt: __t.timestamp(),
+  anonymousAccess: __t.bool(),
 });
 export type Book = __Infer<typeof Book>;
 
@@ -165,6 +166,12 @@ export const ReaderProgress = __t.object("ReaderProgress", {
   completedAt: __t.timestamp(),
 });
 export type ReaderProgress = __Infer<typeof ReaderProgress>;
+
+export const SignedIn = __t.object("SignedIn", {
+  identity: __t.identity(),
+  firstSeen: __t.timestamp(),
+});
+export type SignedIn = __Infer<typeof SignedIn>;
 
 export const User = __t.object("User", {
   identity: __t.identity(),

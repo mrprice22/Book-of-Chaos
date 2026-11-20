@@ -30,10 +30,12 @@
  * is a Playwright test only to reuse the one `webServer` that brings the stack up.
  */
 import { test, expect } from '@playwright/test';
-import { DbConnection } from '../src/module_bindings';
+import type { DbConnection } from '../src/module_bindings';
+import type { MockIssuer } from './support/mockIssuer';
+import { connectSignedIn, startTrustedIssuer } from './support/signIn';
 
-const URI = process.env.SPACETIME_URI ?? 'ws://localhost:3000';
-const DB_NAME = process.env.SPACETIME_DB_NAME ?? 'book-of-chaos';
+/** The trusted mock issuer, so callers are signed in and may write (M15.3). */
+let issuer: MockIssuer;
 
 /** Two questions, so a half-right submission is a distinguishable score. */
 const FIRST_PROMPT = 'What decides whether a quiz was passed?';
@@ -54,16 +56,9 @@ let locked: { quizBlockId: bigint };
  */
 let gatedByBlock: { readingBlockId: bigint; quizBlockId: bigint; prerequisiteId: bigint };
 
-function connect(): Promise<DbConnection> {
-  return new Promise((resolve, reject) => {
-    DbConnection.builder()
-      .withUri(URI)
-      .withDatabaseName(DB_NAME)
-      .onConnect((c) => resolve(c))
-      .onConnectError((_ctx, error) => reject(error))
-      .build();
-    setTimeout(() => reject(new Error(`Timed out connecting to ${URI}/${DB_NAME}`)), 15_000);
-  });
+/** A new signed-in identity (`support/signIn.ts`). */
+async function connect(): Promise<DbConnection> {
+  return (await connectSignedIn(issuer)).conn;
 }
 
 /** Reducer calls resolve before the caller's tables catch up; wait for the row. */
@@ -106,7 +101,7 @@ function resultsFor(attemptId: bigint) {
 
 /** The block's questions in author order — the order the reader sees them in. */
 function questionsOn(blockId: bigint) {
-  return [...conn.db.quizQuestions.iter()]
+  return [...conn.db.visibleQuizQuestions.iter()]
     .filter((q) => q.blockId === blockId)
     .sort((a, b) => a.position - b.position);
 }
@@ -121,7 +116,7 @@ async function createBlock(chapterId: bigint, title: string, kind: 'Reading' | '
     isOptional: false,
   });
   const block = await waitFor(
-    () => [...conn.db.knowledgeBlocks.iter()].find((b) => b.chapterId === chapterId && b.title === title),
+    () => [...conn.db.visibleBlocks.iter()].find((b) => b.chapterId === chapterId && b.title === title),
     `block "${title}"`,
   );
   return block.blockId;
@@ -136,7 +131,7 @@ async function createChapter(bookId: bigint, title: string): Promise<bigint> {
     isPinned: false,
   });
   const chapter = await waitFor(
-    () => [...conn.db.chapters.iter()].find((c) => c.bookId === bookId && c.title === title),
+    () => [...conn.db.visibleChapters.iter()].find((c) => c.bookId === bookId && c.title === title),
     `chapter "${title}"`,
   );
   return chapter.chapterId;
@@ -166,7 +161,7 @@ async function writeQuizInto(blockId: bigint): Promise<void> {
     ],
   });
   await waitFor(() => {
-    const questions = [...conn.db.quizQuestions.iter()].filter((q) => q.blockId === blockId);
+    const questions = [...conn.db.visibleQuizQuestions.iter()].filter((q) => q.blockId === blockId);
     return questions.length === 2 ? questions : undefined;
   }, `the quiz on block ${blockId}`);
 }
@@ -177,12 +172,12 @@ async function writeQuizInto(blockId: bigint): Promise<void> {
  * The harness knows which text is right; a real reader would not.
  */
 function answersFor(blockId: bigint, correctness: 'all' | 'none' | 'half') {
-  const questions = [...conn.db.quizQuestions.iter()]
+  const questions = [...conn.db.visibleQuizQuestions.iter()]
     .filter((q) => q.blockId === blockId)
     .sort((a, b) => a.position - b.position);
 
   return questions.map((question, index) => {
-    const options = [...conn.db.quizOptions.iter()].filter((o) => o.questionId === question.questionId);
+    const options = [...conn.db.visibleQuizOptions.iter()].filter((o) => o.questionId === question.questionId);
     // 'half' answers the first question correctly and the second wrongly: one of
     // two questions right is 50%, below the 100% threshold.
     const wantRight = correctness === 'all' || (correctness === 'half' && index === 0);
@@ -197,6 +192,7 @@ function answersFor(blockId: bigint, correctness: 'all' | 'none' | 'half') {
 }
 
 test.beforeAll(async () => {
+  issuer = await startTrustedIssuer();
   conn = await connect();
   await conn.subscriptionBuilder().subscribeToAllTables();
 
@@ -206,7 +202,7 @@ test.beforeAll(async () => {
     description: 'Created by the quiz-gate harness.',
   });
   const book = await waitFor(
-    () => [...conn.db.books.iter()].find((b) => b.title === title),
+    () => [...conn.db.visibleBooks.iter()].find((b) => b.title === title),
     'the control book',
   );
 
@@ -244,7 +240,7 @@ test.beforeAll(async () => {
     await conn.reducers.setBlockDeps({ blockId, dependsOnBlockIds: [prerequisiteId] });
   }
   await waitFor(
-    () => ([...conn.db.blockDeps.iter()].filter((d) => d.dependsOnBlockId === prerequisiteId).length === 2
+    () => ([...conn.db.visibleBlockDeps.iter()].filter((d) => d.dependsOnBlockId === prerequisiteId).length === 2
       ? true
       : undefined),
     'the block prerequisite edges',
@@ -255,8 +251,9 @@ test.beforeAll(async () => {
   await writeQuizInto(gatedByBlock.quizBlockId);
 });
 
-test.afterAll(() => {
+test.afterAll(async () => {
   conn?.disconnect();
+  await issuer?.close();
 });
 
 test('complete_block still completes an ordinary reading block', async () => {

@@ -13,9 +13,9 @@ import { toMermaid, type NodeInput } from './mermaidSource';
  */
 export function BookMap({ bookId }: { bookId: bigint }) {
   const { identity } = useSpacetimeDB();
-  const [chapters, chaptersReady] = useTable(tables.chapters);
-  const [blocks, blocksReady] = useTable(tables.knowledgeBlocks);
-  const [deps, depsReady] = useTable(tables.chapterDeps);
+  const [chapters, chaptersReady] = useTable(tables.visibleChapters);
+  const [blocks, blocksReady] = useTable(tables.visibleBlocks);
+  const [deps, depsReady] = useTable(tables.visibleChapterDeps);
   const [progress] = useTable(tables.readerProgress);
 
   if (!chaptersReady || !blocksReady || !depsReady) {
