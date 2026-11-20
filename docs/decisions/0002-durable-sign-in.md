@@ -131,7 +131,8 @@ one.
   `sub`/`provider_id` (a SpacetimeAuth user id), `project_id`, `email`, `email_verified`, and
   `aud` = the client id. The anonymous login's value has not been read yet.
 - **ID tokens last 15 minutes** (`exp − iat = 900` on that token). A durable identity is not
-  a durable session, so M15.4 adds renewal.
+  a durable session, so M15.4 adds renewal. A refresh token **is** issued when the client
+  asks for `offline_access`: the stored sign-in held one on the human's check, 2026-11-20.
 - **A real SpacetimeAuth token.** The project exists and its discovery document, client ID
   and redirect URIs were checked (blocked.md, resolved M14.2). But no one has signed in, so
   no real token has been through a module yet. That is M15.1's first live run.

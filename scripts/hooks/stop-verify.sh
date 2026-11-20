@@ -21,6 +21,19 @@ mkdir -p "$STATE_DIR"
 # Nothing to verify before the gate itself exists.
 [ -x "$REPO/scripts/verify.sh" ] || exit 0
 
+# One hook run in flight at a time. Every Stop fires this hook, and a gate run takes
+# minutes, so without this each turn queued another full run (six were seen at once
+# on 2026-11-20). verify.sh's own lock would make them take turns, but each would
+# still run. A hook that finds one already in flight steps aside, and that run
+# reports its own verdict, waking Claude if it is red.
+if command -v flock >/dev/null 2>&1; then
+  exec 8>"$STATE_DIR/stop-hook.lock"
+  if ! flock -n 8; then
+    printf '{"systemMessage":"verify.sh from an earlier stop is still running; it will report its own verdict."}\n'
+    exit 0
+  fi
+fi
+
 output="$("$REPO/scripts/verify.sh" 2>&1)"
 status=$?
 

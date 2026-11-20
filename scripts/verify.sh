@@ -30,6 +30,29 @@ fi
 LIST_ONLY=0
 [ "${1:-}" = "--list" ] && LIST_ONLY=1
 
+# One run at a time. The e2e stages start a real SpacetimeDB and a real vite on fixed
+# ports (3000, 5173) and share client/test-results, so two overlapping runs tear down
+# each other's servers. The symptom is ERR_CONNECTION_REFUSED, artifact ENOENTs and
+# timeouts, none of which names the cause. On 2026-11-20 the Stop hook had six runs
+# going at once. A second run now waits its turn, and says so.
+#
+# The lock lives in the git dir: shared by the host and the dev container (same bind
+# mount), never committed, and present in CI's checkout. No git dir or no flock means
+# no lock, which is the old behaviour, not a failure.
+VERIFY_LOCK_WAIT="${VERIFY_LOCK_WAIT:-1800}"
+if [ "$LIST_ONLY" = 0 ] && command -v flock >/dev/null 2>&1 &&
+  git_dir="$(git -C "$REPO" rev-parse --git-common-dir 2>/dev/null)"; then
+  case "$git_dir" in /*) ;; *) git_dir="$REPO/$git_dir" ;; esac
+  exec 9>"$git_dir/boc-verify.lock"
+  if ! flock -n 9; then
+    echo "another verify.sh is running; waiting up to ${VERIFY_LOCK_WAIT}s for it to finish"
+    if ! flock -w "$VERIFY_LOCK_WAIT" 9; then
+      echo "VERIFY RED    gave up after ${VERIFY_LOCK_WAIT}s waiting for another verify.sh run"
+      exit 1
+    fi
+  fi
+fi
+
 FAILED=(); RAN=0; SKIPPED=0
 
 in_container() { [ -f /run/.containerenv ] || [ -f /.dockerenv ]; }

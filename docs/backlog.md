@@ -551,8 +551,8 @@ M16–M19 below are amended where a record changed their shape.
       the same identity. The ID token's claims: `login_method: "magic_link"`, `sub` =
       `provider_id` = a SpacetimeAuth user id, `email_verified`, and a **900-second lifetime**
 - [ ] **M15.4** Keep a sign-in alive past its 15-minute ID token (found by M15.1). Renew
-      with the refresh token if SpacetimeAuth issues one for `offline_access`. If not, use
-      a silent re-authorization. When a page loads with an expired ID token, renew before
+      with the refresh token: SpacetimeAuth does issue one for `offline_access` (the human's
+      console check on 2026-11-20 showed `refresh: true`). When a page loads with an expired ID token, renew before
       falling back to anonymous. A reconnect opens with the current token, not the one the
       page loaded with. Unit tests on the pure parts, plus a human check that a reader is
       still signed in after 20 minutes and after a reload
@@ -761,6 +761,16 @@ them.** The three v0.1 entries that used to live here became M9.
   lockfile at the top of `verify.sh`, either waiting or refusing with a clear
   message, would turn a confusing half-hour into one line of output. Cost one
   session most of an afternoon chasing failures that were not in the code.
+  **Seen again 2026-11-20, and worse:** the Stop hook itself had *four* `verify.sh`
+  runs going at once, one per Stop, each started before the last finished. The red
+  report blamed `e2e-smoke` (`ERR_CONNECTION_REFUSED` on 5173) and `answer-key` (a
+  Playwright artifact `ENOENT`). Neither was in the code. So the lock belongs in
+  `scripts/hooks/stop-verify.sh` as well as `verify.sh`: a hook run that finds one
+  already going should wait for its verdict, not start another.
+  **Fixed 2026-11-20.** `verify.sh` takes a `flock` on `<git dir>/boc-verify.lock`, so a
+  second run waits (up to `VERIFY_LOCK_WAIT`, 1800 s) and says so. The Stop hook steps
+  aside when a run from an earlier stop is still in flight. All three paths were checked
+  by holding the locks by hand. Delete this entry once a week passes with no overlap.
 
 - **`scope-guard` fires now, but its *warning* path has never run in CI.** Run #15 on
   `112864b` reported `scope-guard -> success` rather than `skipped`, which closes the
