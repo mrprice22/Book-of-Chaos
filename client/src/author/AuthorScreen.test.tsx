@@ -8,9 +8,15 @@ const ME = Identity.fromString('a11ce'.padStart(64, '0'));
 const SOMEONE_ELSE = Identity.fromString('b0b'.padStart(64, '0'));
 
 const sdk = vi.hoisted(() => ({
+  signedIn: true,
+  signIn: undefined as unknown,
   ready: true,
   rows: {} as Record<string, readonly unknown[]>,
   createBook: undefined as unknown,
+}));
+
+vi.mock('../spacetime/session', () => ({
+  useSession: () => ({ signedIn: sdk.signedIn, signIn: sdk.signIn }),
 }));
 
 vi.mock('spacetimedb/react', async () => {
@@ -73,5 +79,25 @@ describe('AuthorScreen', () => {
   it('reads books from the books table', async () => {
     const { tables } = await import('../module_bindings');
     expect(getQueryAccessorName(tables.visibleBooks)).toBe('visibleBooks');
+  });
+});
+
+describe('AuthorScreen for a visitor who is not signed in', () => {
+  beforeEach(() => {
+    sdk.signedIn = false;
+    sdk.signIn = vi.fn();
+  });
+
+  afterEach(() => {
+    sdk.signedIn = true;
+  });
+
+  it('asks them to sign in instead of offering a form', async () => {
+    render(<AuthorScreen />);
+    expect(screen.getByText(/sign in to write books/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText('Title')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    expect(sdk.signIn).toHaveBeenCalled();
   });
 });

@@ -34,10 +34,8 @@ import {
 } from "spacetimedb";
 
 // Import all reducer arg schemas
-import BeginLinkReducer from "./begin_link_reducer";
 import ClaimUsernameReducer from "./claim_username_reducer";
 import CompleteBlockReducer from "./complete_block_reducer";
-import CompleteLinkReducer from "./complete_link_reducer";
 import CreateBlockReducer from "./create_block_reducer";
 import CreateBookReducer from "./create_book_reducer";
 import CreateChapterReducer from "./create_chapter_reducer";
@@ -200,10 +198,8 @@ const tablesSchema = __schema({
 
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
-  __reducerSchema("begin_link", BeginLinkReducer),
   __reducerSchema("claim_username", ClaimUsernameReducer),
   __reducerSchema("complete_block", CompleteBlockReducer),
-  __reducerSchema("complete_link", CompleteLinkReducer),
   __reducerSchema("create_block", CreateBlockReducer),
   __reducerSchema("create_book", CreateBookReducer),
   __reducerSchema("create_chapter", CreateChapterReducer),

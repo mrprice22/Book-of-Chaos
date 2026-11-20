@@ -12,7 +12,8 @@
  * empty result can only mean the view filtered, not that the rows were never written.
  */
 import { test, expect } from '@playwright/test';
-import type { MockIssuer } from './support/mockIssuer';
+import type { DbConnection } from '../src/module_bindings';
+import { startIssuer, type MockIssuer } from './support/mockIssuer';
 import {
   CLIENT_ID,
   connectAs,
@@ -23,6 +24,9 @@ import {
 } from './support/signIn';
 
 let issuer: MockIssuer;
+/** Valid tokens, properly signed and served, from an issuer the module does not trust. */
+let untrusted: MockIssuer;
+const UNTRUSTED_PORT = 3201;
 let author: Caller;
 const opened: Caller[] = [];
 
@@ -119,6 +123,7 @@ const NONE = { books: 0, chapters: 0, blocks: 0 };
 
 test.beforeAll(async () => {
   issuer = await startTrustedIssuer();
+  untrusted = await startIssuer(UNTRUSTED_PORT);
   author = await subscribed(connectSignedIn(issuer, { sub: uniqueSub('author') }));
   books = {
     open: await makeBook('Open', true, true),
@@ -130,6 +135,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   for (const c of opened) c.conn.disconnect();
   await issuer?.close();
+  await untrusted?.close();
 });
 
 test('a signed-in stranger reads every book, drafts included', async () => {
@@ -342,4 +348,137 @@ test('grade_quiz refuses a quiz in a book closed to anonymous readers', async ()
   expect(
     await reader.conn.procedures.gradeQuiz({ blockId: quiz.blockId, answers: quiz.answer(RIGHT) }),
   ).toMatchObject({ ok: { passed: true } });
+});
+
+// ---------------------------------------------------------------------------
+// Writing: every writing reducer refuses a caller who is not signed in
+// ---------------------------------------------------------------------------
+
+/** The exact text of `rules::NOT_SIGNED_IN`, the same for every reducer by design. */
+const NOT_SIGNED_IN = 'Sign in to make changes.';
+
+/**
+ * Every writing reducer, called with arguments that name real rows of the author's
+ * open book. Without the sign-in check each call would succeed or meet a different
+ * refusal (ownership, validation), so only that check can produce `NOT_SIGNED_IN`.
+ * A reducer added to the module and missing here is caught by the count below.
+ */
+function writingCalls(ids: { bookId: bigint; chapterId: bigint; blockId: bigint }) {
+  const { bookId, chapterId, blockId } = ids;
+  const calls: Record<string, (r: DbConnection['reducers']) => Promise<void>> = {
+    claim_username: (r) => r.claimUsername({ username: `a${uniqueSub('u').replace(/-/g, '')}` }),
+    create_book: (r) => r.createBook({ title: 'Anonymous book', description: '' }),
+    update_book: (r) => r.updateBook({ bookId, title: 'Renamed', description: '' }),
+    publish_book: (r) => r.publishBook({ bookId }),
+    set_anonymous_access: (r) => r.setAnonymousAccess({ bookId, enabled: false }),
+    create_chapter: (r) =>
+      r.createChapter({ bookId, title: 'More', description: '', isOptional: false, isPinned: false }),
+    update_chapter: (r) =>
+      r.updateChapter({ chapterId, title: 'Renamed', description: '', isOptional: false, isPinned: false }),
+    reorder_chapters: (r) => r.reorderChapters({ bookId, orderedChapterIds: [chapterId] }),
+    set_chapter_deps: (r) => r.setChapterDeps({ chapterId, dependsOnChapterIds: [] }),
+    create_block: (r) =>
+      r.createBlock({
+        chapterId,
+        title: 'More',
+        blockType: { tag: 'Reading' },
+        bodyHtml: '<p>x</p>',
+        url: undefined,
+        isOptional: false,
+      }),
+    update_block: (r) =>
+      r.updateBlock({
+        blockId,
+        title: 'Renamed',
+        blockType: { tag: 'Reading' },
+        bodyHtml: '<p>x</p>',
+        url: undefined,
+        isOptional: false,
+      }),
+    delete_block: (r) => r.deleteBlock({ blockId }),
+    set_block_deps: (r) => r.setBlockDeps({ blockId, dependsOnBlockIds: [] }),
+    set_quiz: (r) =>
+      r.setQuiz({
+        blockId,
+        passThreshold: 50,
+        questions: [{ promptHtml: 'Q', options: [{ textHtml: 'A', isCorrect: true }] }],
+      }),
+    complete_block: (r) => r.completeBlock({ blockId }),
+    submit_quiz: (r) => r.submitQuiz({ blockId, answers: [] }),
+  };
+  return calls;
+}
+
+async function refusalFrom(call: Promise<void>): Promise<string> {
+  try {
+    await call;
+    return '';
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+}
+
+/** Ids in the open book, read from the author's subscription. */
+function openBookIds() {
+  const db = author.conn.db;
+  const chapter = [...db.visibleChapters.iter()].find((c) => c.bookId === books.open);
+  const block = chapter && [...db.visibleBlocks.iter()].find((b) => b.chapterId === chapter.chapterId);
+  if (!chapter || !block) throw new Error('the open book has no chapter or block');
+  return { bookId: books.open, chapterId: chapter.chapterId, blockId: block.blockId };
+}
+
+test('the list of writing reducers is every reducer the module has', async () => {
+  // Reducers a client can call, from the generated bindings of the running module.
+  const caller = await connectAs();
+  opened.push(caller);
+  const inBindings = Object.keys(caller.conn.reducers).sort();
+  const camel = (name: string) => name.replace(/_(\w)/g, (_m, c: string) => c.toUpperCase());
+  expect(Object.keys(writingCalls(openBookIds())).map(camel).sort()).toEqual(inBindings);
+});
+
+const notSignedIn: [string, () => Promise<Caller>][] = [
+  ['an anonymous token', () => connectAs()],
+  // Also the shape of a worker's token (decision 0005): no verified email.
+  ['SpacetimeAuth’s anonymous login', () => connectAs(issuer.mint({ sub: uniqueSub('anon-login'), aud: CLIENT_ID }))],
+  [
+    'a verified email from an issuer nobody trusts',
+    () => connectAs(untrusted.mint({ sub: uniqueSub('stranger'), aud: CLIENT_ID, emailVerified: true })),
+  ],
+  [
+    'a verified email for another client’s audience',
+    () => connectAs(issuer.mint({ sub: uniqueSub('other-aud'), aud: 'some-other-client', emailVerified: true })),
+  ],
+];
+
+for (const [shape, connect] of notSignedIn) {
+  test(`${shape} is refused by every writing reducer`, async () => {
+    const caller = await connect();
+    opened.push(caller);
+    const before = rowsFor(author, books.open);
+    const refusals: Record<string, string> = {};
+    for (const [name, call] of Object.entries(writingCalls(openBookIds()))) {
+      refusals[name] = await refusalFrom(call(caller.conn.reducers));
+    }
+    const expected = Object.fromEntries(Object.keys(refusals).map((name) => [name, NOT_SIGNED_IN]));
+    expect(refusals).toEqual(expected);
+
+    // And nothing changed: no chapter or block was added or deleted.
+    expect(rowsFor(author, books.open)).toEqual(before);
+  });
+}
+
+test('the same calls by the signed-in owner get past the sign-in check', async () => {
+  // The control. Every call above was refused before anything else was asked; here
+  // none of them is refused for not being signed in. (Some are refused for other
+  // reasons, such as submitting a reading block as a quiz.)
+  const bookId = await makeBook('Control', true, true);
+  const db = author.conn.db;
+  const chapter = [...db.visibleChapters.iter()].find((c) => c.bookId === bookId);
+  const block = chapter && [...db.visibleBlocks.iter()].find((b) => b.chapterId === chapter.chapterId);
+  if (!chapter || !block) throw new Error('the control book has no chapter or block');
+  for (const [name, call] of Object.entries(
+    writingCalls({ bookId, chapterId: chapter.chapterId, blockId: block.blockId }),
+  )) {
+    expect(await refusalFrom(call(author.conn.reducers)), name).not.toBe(NOT_SIGNED_IN);
+  }
 });

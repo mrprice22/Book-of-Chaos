@@ -113,6 +113,14 @@ A link that moved only the username would leave a returning author locked out of
 books. So M15.2's `complete_link` rewrites all four in the same transaction, refuses if the
 new identity already owns rows in any of them, and is tested on each.
 
+**Retired (2026-11-20, M15.3).** Once a caller who is not signed in writes nothing, no
+anonymous identity gains rows to carry, and the carry-over's happy path cannot be set up
+in a test. The human chose to retire it rather than keep untested code that moves data.
+`begin_link`, `complete_link` and the `identity-link` stage are gone. The sign-in rule's
+real-token checks (an untrusted issuer, a wrong audience, the anonymous-login shape) moved
+to the `anonymous` stage, where every writing reducer must refuse them. Rows an anonymous
+identity wrote before M15.3 stay with it.
+
 ## Consequences for later work
 
 - **Trusted issuers are per build.** The trusted issuer and client id cannot be one constant.

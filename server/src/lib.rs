@@ -322,16 +322,11 @@ pub struct QuizAnswerKey {
     pub question_id: u64,
 }
 
-/// An anonymous identity's offer to hand its rows to a signed-in one (M15.2).
-///
-/// Private, and holding no secret. The offer names both ends: `begin_link` records
-/// that the *caller* offers itself to `to_identity`, and `complete_link` takes it only
-/// when *its* caller is `to_identity`. Each end is proved by the token it connected
-/// with, so nothing here has to be guessed or kept secret. Decision 0002's spike used a
-/// random one-time code from `ctx.random` instead. Nothing shows that is fit for
-/// secrets, and naming the target removes the need for one.
-///
-/// One offer per offering identity: a second `begin_link` replaces the first.
+/// **Retired** with the carry-over it served (M15.2, removed by M15.3 at the human's
+/// call). Nothing reads or writes it. It stays only because SpacetimeDB refuses to drop
+/// a table that still holds rows ("Cannot remove table `link_requests`: table contains
+/// data"), and a database may hold an offer nobody took. Dropping it is in the backlog's
+/// parking lot.
 #[spacetimedb::table(accessor = link_requests)]
 pub struct LinkRequest {
     #[primary_key]
@@ -394,6 +389,8 @@ pub fn identity_disconnected(ctx: &ReducerContext) {
 /// instead of a constraint violation.
 #[spacetimedb::reducer]
 pub fn claim_username(ctx: &ReducerContext, username: String) -> Result<(), String> {
+    // Authorization first, and signing in is the first half of it (M15.3).
+    rules::require_signed_in(caller_signed_in(ctx))?;
     let caller = ctx.sender();
     let caller_has_username = ctx.db.users().identity().find(caller).is_some();
     let username_taken = ctx.db.users().username().find(&username).is_some();
@@ -421,116 +418,6 @@ fn caller_signed_in(ctx: &ReducerContext) -> bool {
     })
 }
 
-/// Does `identity` hold a row in any identity-keyed table? These four are every
-/// table keyed by identity, and `complete_link` moves all of them.
-fn has_identity_rows(ctx: &ReducerContext, identity: Identity) -> bool {
-    ctx.db.users().identity().find(identity).is_some()
-        || ctx.db.books().owner().filter(identity).next().is_some()
-        || ctx
-            .db
-            .reader_progress()
-            .identity()
-            .filter(identity)
-            .next()
-            .is_some()
-        || ctx
-            .db
-            .quiz_attempts()
-            .identity()
-            .filter(identity)
-            .next()
-            .is_some()
-}
-
-/// Step one of carrying an anonymous identity over (decision 0002): the **anonymous** identity
-/// offers its rows to `target`, the signed-in identity the same browser just signed
-/// in as. The browser still holds the anonymous token when the sign-in redirect
-/// returns, so it can make this call with one connection and `complete_link` with the
-/// other.
-#[spacetimedb::reducer]
-pub fn begin_link(ctx: &ReducerContext, target: Identity) -> Result<(), String> {
-    let caller = ctx.sender();
-    rules::can_begin_link(
-        caller_signed_in(ctx),
-        has_identity_rows(ctx, caller),
-        target == caller,
-    )?;
-
-    ctx.db.link_requests().from_identity().delete(caller);
-    ctx.db.link_requests().insert(LinkRequest {
-        from_identity: caller,
-        to_identity: target,
-        created_at: ctx.timestamp,
-    });
-    Ok(())
-}
-
-/// Step two: the signed-in caller takes the offer `from` made to it.
-///
-/// Every identity-keyed row moves, in this one transaction: the username, the books
-/// it owns, its reading progress and its quiz attempts. A link that moved only the
-/// username would leave a returning author locked out of their own books. The offer
-/// is consumed, so it cannot be taken twice.
-#[spacetimedb::reducer]
-pub fn complete_link(ctx: &ReducerContext, from: Identity) -> Result<(), String> {
-    let caller = ctx.sender();
-    let caller_has_rows = has_identity_rows(ctx, caller);
-    let offer = ctx
-        .db
-        .link_requests()
-        .from_identity()
-        .find(from)
-        .filter(|offer| offer.to_identity == caller);
-    let source_has_rows = has_identity_rows(ctx, from);
-
-    rules::can_complete_link(
-        caller_signed_in(ctx),
-        caller_has_rows,
-        offer.as_ref().map(|offer| rules::LinkFacts {
-            age_micros: ctx.timestamp.to_micros_since_unix_epoch()
-                - offer.created_at.to_micros_since_unix_epoch(),
-            source_has_rows,
-        }),
-    )?;
-    ctx.db.link_requests().from_identity().delete(from);
-
-    // A username is carried when there is one. The reader has no screen that claims
-    // one, so most identities arrive with books and progress and no `users` row.
-    if let Some(user) = ctx.db.users().identity().find(from) {
-        ctx.db.users().identity().delete(from);
-        ctx.db.users().insert(User {
-            identity: caller,
-            ..user
-        });
-    }
-
-    let books: Vec<Book> = ctx.db.books().owner().filter(from).collect();
-    for book in books {
-        ctx.db.books().book_id().update(Book {
-            owner: caller,
-            ..book
-        });
-    }
-    let progress: Vec<ReaderProgress> = ctx.db.reader_progress().identity().filter(from).collect();
-    for row in progress {
-        ctx.db
-            .reader_progress()
-            .progress_id()
-            .update(ReaderProgress {
-                identity: caller,
-                ..row
-            });
-    }
-    let attempts: Vec<QuizAttempt> = ctx.db.quiz_attempts().identity().filter(from).collect();
-    for row in attempts {
-        ctx.db.quiz_attempts().attempt_id().update(QuizAttempt {
-            identity: caller,
-            ..row
-        });
-    }
-    Ok(())
-}
-
 // ---------------------------------------------------------------------------
 // Book reducers
 // ---------------------------------------------------------------------------
@@ -538,6 +425,8 @@ pub fn complete_link(ctx: &ReducerContext, from: Identity) -> Result<(), String>
 /// Create a book. The caller becomes its Owner — the only writing role in v0.1.
 #[spacetimedb::reducer]
 pub fn create_book(ctx: &ReducerContext, title: String, description: String) -> Result<(), String> {
+    // Authorization first, and signing in is the first half of it (M15.3).
+    rules::require_signed_in(caller_signed_in(ctx))?;
     // The creator is the owner by definition, so the owner check is trivially
     // satisfied here; it is still routed through the same rule so that all four
     // book reducers share one code path.
@@ -564,6 +453,8 @@ pub fn update_book(
     title: String,
     description: String,
 ) -> Result<(), String> {
+    // Authorization first, and signing in is the first half of it (M15.3).
+    rules::require_signed_in(caller_signed_in(ctx))?;
     let book = find_book(ctx, book_id)?;
     rules::can_write_book(book.owner == ctx.sender(), &title, &description)?;
 
@@ -582,6 +473,8 @@ pub fn update_book(
 /// so a double-click cannot produce an error the author has to reason about.
 #[spacetimedb::reducer]
 pub fn publish_book(ctx: &ReducerContext, book_id: u64) -> Result<(), String> {
+    // Authorization first, and signing in is the first half of it (M15.3).
+    rules::require_signed_in(caller_signed_in(ctx))?;
     let book = find_book(ctx, book_id)?;
     rules::require_owner(book.owner == ctx.sender())?;
 
@@ -605,6 +498,8 @@ pub fn set_anonymous_access(
     book_id: u64,
     enabled: bool,
 ) -> Result<(), String> {
+    // Authorization first, and signing in is the first half of it (M15.3).
+    rules::require_signed_in(caller_signed_in(ctx))?;
     let book = find_book(ctx, book_id)?;
     rules::require_owner(book.owner == ctx.sender())?;
 
@@ -645,6 +540,8 @@ pub fn create_chapter(
     is_optional: bool,
     is_pinned: bool,
 ) -> Result<(), String> {
+    // Authorization first, and signing in is the first half of it (M15.3).
+    rules::require_signed_in(caller_signed_in(ctx))?;
     let book = find_book(ctx, book_id)?;
     rules::can_write_chapter(book.owner == ctx.sender(), &title, &description)?;
 
@@ -682,6 +579,8 @@ pub fn update_chapter(
     is_optional: bool,
     is_pinned: bool,
 ) -> Result<(), String> {
+    // Authorization first, and signing in is the first half of it (M15.3).
+    rules::require_signed_in(caller_signed_in(ctx))?;
     let chapter = find_chapter(ctx, chapter_id)?;
     let book = find_book(ctx, chapter.book_id)?;
     rules::can_write_chapter(book.owner == ctx.sender(), &title, &description)?;
@@ -709,6 +608,8 @@ pub fn reorder_chapters(
     book_id: u64,
     ordered_chapter_ids: Vec<u64>,
 ) -> Result<(), String> {
+    // Authorization first, and signing in is the first half of it (M15.3).
+    rules::require_signed_in(caller_signed_in(ctx))?;
     let book = find_book(ctx, book_id)?;
     rules::require_owner(book.owner == ctx.sender())?;
 
@@ -756,6 +657,8 @@ pub fn set_chapter_deps(
     chapter_id: u64,
     depends_on_chapter_ids: Vec<u64>,
 ) -> Result<(), String> {
+    // Authorization first, and signing in is the first half of it (M15.3).
+    rules::require_signed_in(caller_signed_in(ctx))?;
     let chapter = find_chapter(ctx, chapter_id)?;
     let book = find_book(ctx, chapter.book_id)?;
     rules::require_owner(book.owner == ctx.sender())?;
@@ -830,6 +733,8 @@ pub fn create_block(
     url: Option<String>,
     is_optional: bool,
 ) -> Result<(), String> {
+    // Authorization first, and signing in is the first half of it (M15.3).
+    rules::require_signed_in(caller_signed_in(ctx))?;
     let chapter = find_chapter(ctx, chapter_id)?;
     let book = find_book(ctx, chapter.book_id)?;
     let is_resource_link = block_type == BlockType::ResourceLink;
@@ -878,6 +783,8 @@ pub fn update_block(
     url: Option<String>,
     is_optional: bool,
 ) -> Result<(), String> {
+    // Authorization first, and signing in is the first half of it (M15.3).
+    rules::require_signed_in(caller_signed_in(ctx))?;
     let block = find_block(ctx, block_id)?;
     let chapter = find_chapter(ctx, block.chapter_id)?;
     let book = find_book(ctx, chapter.book_id)?;
@@ -917,6 +824,8 @@ pub fn update_block(
 /// the unlock engine (M3) would read as progress the reader never made.
 #[spacetimedb::reducer]
 pub fn delete_block(ctx: &ReducerContext, block_id: u64) -> Result<(), String> {
+    // Authorization first, and signing in is the first half of it (M15.3).
+    rules::require_signed_in(caller_signed_in(ctx))?;
     let block = find_block(ctx, block_id)?;
     let chapter = find_chapter(ctx, block.chapter_id)?;
     let book = find_book(ctx, chapter.book_id)?;
@@ -1009,6 +918,8 @@ pub fn set_block_deps(
     block_id: u64,
     depends_on_block_ids: Vec<u64>,
 ) -> Result<(), String> {
+    // Authorization first, and signing in is the first half of it (M15.3).
+    rules::require_signed_in(caller_signed_in(ctx))?;
     let block = find_block(ctx, block_id)?;
     let chapter = find_chapter(ctx, block.chapter_id)?;
     let book = find_book(ctx, chapter.book_id)?;
@@ -1130,6 +1041,8 @@ pub fn set_quiz(
     pass_threshold: u32,
     questions: Vec<QuizQuestionInput>,
 ) -> Result<(), String> {
+    // Authorization first, and signing in is the first half of it (M15.3).
+    rules::require_signed_in(caller_signed_in(ctx))?;
     let block = find_block(ctx, block_id)?;
     let chapter = find_chapter(ctx, block.chapter_id)?;
     let book = find_book(ctx, chapter.book_id)?;
@@ -1253,6 +1166,8 @@ fn clear_quiz(ctx: &ReducerContext, block_id: u64) {
 /// new row is the same thing that moves the node on the map.
 #[spacetimedb::reducer]
 pub fn complete_block(ctx: &ReducerContext, block_id: u64) -> Result<(), String> {
+    // Authorization first, and signing in is the first half of it (M15.3).
+    rules::require_signed_in(caller_signed_in(ctx))?;
     let reader = ctx.sender();
     let block = find_block(ctx, block_id)?;
     let chapter = find_chapter(ctx, block.chapter_id)?;
@@ -1311,6 +1226,8 @@ pub fn submit_quiz(
     block_id: u64,
     answers: Vec<QuizAnswerInput>,
 ) -> Result<(), String> {
+    // Authorization first, and signing in is the first half of it (M15.3).
+    rules::require_signed_in(caller_signed_in(ctx))?;
     let reader = ctx.sender();
     let block = find_block(ctx, block_id)?;
     if block.block_type != BlockType::Quiz {

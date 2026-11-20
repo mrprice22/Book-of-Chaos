@@ -6,10 +6,8 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
-import BeginLinkReducer from "../begin_link_reducer";
 import ClaimUsernameReducer from "../claim_username_reducer";
 import CompleteBlockReducer from "../complete_block_reducer";
-import CompleteLinkReducer from "../complete_link_reducer";
 import CreateBlockReducer from "../create_block_reducer";
 import CreateBookReducer from "../create_book_reducer";
 import CreateChapterReducer from "../create_chapter_reducer";
@@ -25,10 +23,8 @@ import UpdateBlockReducer from "../update_block_reducer";
 import UpdateBookReducer from "../update_book_reducer";
 import UpdateChapterReducer from "../update_chapter_reducer";
 
-export type BeginLinkParams = __Infer<typeof BeginLinkReducer>;
 export type ClaimUsernameParams = __Infer<typeof ClaimUsernameReducer>;
 export type CompleteBlockParams = __Infer<typeof CompleteBlockReducer>;
-export type CompleteLinkParams = __Infer<typeof CompleteLinkReducer>;
 export type CreateBlockParams = __Infer<typeof CreateBlockReducer>;
 export type CreateBookParams = __Infer<typeof CreateBookReducer>;
 export type CreateChapterParams = __Infer<typeof CreateChapterReducer>;

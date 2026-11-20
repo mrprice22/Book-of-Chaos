@@ -96,7 +96,7 @@ the host.
 ./scripts/verify.sh
 ```
 
-Expect `VERIFY GREEN  17 ran, 0 skipped`.
+Expect `VERIFY GREEN  16 ran, 0 skipped`.
 
 If `preflight` FAILs, stop and read it: it means the toolchain does not match the pins
 in `scripts/toolchain-versions.sh`, and every stage after it would be testing something
@@ -185,6 +185,8 @@ Back to the book, click **Foundations**.
 Mark the first two complete.
 
 - [ ] Each button becomes *Completed* immediately, with no page reload
+- [ ] The chapter says your progress is *kept in this browser only and can be lost*.
+      You are not signed in, so since M15.3 nothing you do is saved on the server
 
 Click **Back to the book**.
 
@@ -262,7 +264,11 @@ If tab B needs a refresh to catch up, v0.1 has failed its central claim.
 
 Click **Author** in the navigation.
 
-- [ ] Your own books are listed (empty on a fresh identity), with a *New book* form
+- [ ] Not signed in, it says *Sign in to write books* and offers no form. Press
+      **Sign in** and finish the provider's email sign-in (a real email: the local
+      build trusts SpacetimeAuth as well as the test issuer)
+- [ ] Signed in, your own books are listed (empty on a fresh identity), with a *New
+      book* form
 - [ ] **Chaos, Briefly** is *not* listed — it belongs to the seed script's identity
 
 Create a book with any title, then open it from the list.

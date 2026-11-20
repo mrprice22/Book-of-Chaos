@@ -12,7 +12,7 @@ import { saveToken } from './token';
  * the handshake. For an anonymous reader, the token that comes back is written
  * down, which is what makes a returning reader the *same* reader rather than a new
  * anonymous one. A signed-in reader's identity comes from their ID token instead,
- * and the anonymous token is left as it was, for the username carry-over (M15.2).
+ * and the anonymous token is left as it was, for when they sign out.
  *
  * A signed-in reader's token is replaced on the builder each time the keeper renews
  * it. The provider rebuilds every reconnect from this same builder, so a reconnect

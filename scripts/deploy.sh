@@ -205,7 +205,7 @@ PUBLISH_FLAGS="--server local --yes"
 
 # Which sign-ins the module trusts is fixed at build time (server/src/signin.rs).
 # The hosted build (`remote`, above) sets nothing and trusts SpacetimeAuth only. The
-# local build also trusts the mock issuer `client/e2e/identity-link.spec.ts` runs on
+# local build also trusts the mock issuer the e2e stages run (`client/e2e/support/`) on
 # 127.0.0.1, because no test can click through a real login page. SpacetimeAuth stays
 # in the list so a developer can still sign in for real against a local server.
 MOCK_ISSUER_CLIENT="http://127.0.0.1:3200|boc-e2e"

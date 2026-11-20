@@ -1,4 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
+import type { MockIssuer } from './support/mockIssuer';
+import { CLIENT_ID, signedInToken, startTrustedIssuer } from './support/signIn';
 
 /**
  * The Definition of Done demo path, against a real stack.
@@ -223,8 +225,52 @@ test('a quiz is failed, then passed, and only then does the chapter unlock', asy
   await expect(mapNode(page, 'Attractors')).toContainText('○');
 });
 
-test('an author can build a book through the UI', async ({ page }) => {
+/** Must match the client's defaults in src/spacetime/config.ts. */
+const AUTHORITY = 'https://auth.spacetimedb.com/oidc';
+const APP_CLIENT_ID = 'client_0350We80wbokeNK7YI9r5X';
+
+/**
+ * Sign the page in without the provider's login page, which no test can click
+ * through: store an oidc-client-ts user whose ID token comes from the mock issuer the
+ * local module trusts. The client reads it at startup exactly as it reads a real one.
+ */
+async function signIn(page: Page, issuer: MockIssuer) {
+  const idToken = signedInToken(issuer, { aud: CLIENT_ID });
+  const user = {
+    id_token: idToken,
+    access_token: 'unused-by-the-client',
+    token_type: 'Bearer',
+    scope: 'openid profile email',
+    profile: { sub: 'smoke-author', iss: issuer.issuer, aud: CLIENT_ID },
+    expires_at: Math.floor(Date.now() / 1000) + 3600,
+  };
+  await page.addInitScript(
+    ([key, value]) => window.localStorage.setItem(key, value),
+    [`oidc.user:${AUTHORITY}:${APP_CLIENT_ID}`, JSON.stringify(user)] as const,
+  );
+}
+
+test('a visitor who is not signed in is asked to sign in before authoring', async ({ page }) => {
   await connected(page);
+  await page.getByRole('button', { name: 'Author' }).click();
+  await expect(page.getByText(/sign in to write books/i)).toBeVisible();
+  await expect(page.getByLabel('Title')).toHaveCount(0);
+});
+
+test('an author can build a book through the UI', async ({ page }) => {
+  // Since M15.3 only a signed-in caller writes, so this author signs in.
+  const issuer = await startTrustedIssuer();
+  try {
+    await signIn(page, issuer);
+    await connected(page);
+    await expect(page.getByText('Signed in')).toBeVisible();
+    await buildABook(page);
+  } finally {
+    await issuer.close();
+  }
+});
+
+async function buildABook(page: Page) {
   await page.getByRole('button', { name: 'Author' }).click();
 
   const title = `Test Book ${Date.now()}`;
@@ -241,4 +287,4 @@ test('an author can build a book through the UI', async ({ page }) => {
 
   await page.getByRole('button', { name: 'Publish' }).click();
   await expect(page.getByText(/readers can see this book/i)).toBeVisible();
-});
+}

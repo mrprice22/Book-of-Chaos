@@ -573,6 +573,9 @@ M16–M19 below are amended where a record changed their shape.
       readers. Fixed to carry any identity-keyed row (`2c73d8a`) and republished. Verified
       2026-11-20 by the human: a book created anonymously in a private window was still in
       the author list after signing in with a new email
+      **Retired by M15.3 at the human's call (2026-11-20).** Once anonymous callers write
+      nothing, there is nothing new to carry, and no test could set up the happy path
+      (`docs/blocked.md`, Resolved). The reducers, the client call and the stage are gone
 - [x] **M15.5** Choose an account when signing in (asked for by the human, 2026-11-20).
       **Dropped at the human's call; reverted to one "Sign in".** Built as "Continue as
       <email>" plus "Use another account" (`prompt=login`), in `f909431` and `644c42f`. The
@@ -581,7 +584,7 @@ M16–M19 below are amended where a record changed their shape.
       page. SpacetimeAuth's `/login.js` never reads the hint, and it refuses
       `prompt=select_account`. With no one-click path, the second button promised what it
       could not do. The one earlier sign-in that skipped the email page was not seen again
-- [~] **M15.3** Anonymous visitors can browse public works and cannot call any writing
+- [x] **M15.3** Anonymous visitors can browse public works and cannot call any writing
       reducer, with a rejection test per reducer. The module's trusted `(issuer, client_id)`
       pairs are build-time configuration (`option_env!`, set by `deploy.sh` per target), so the
       e2e build trusts a mock issuer and the hosted build only SpacetimeAuth. (M15.2 built
@@ -603,6 +606,14 @@ M16–M19 below are amended where a record changed their shape.
       a test shows it can call no other writing reducer. The client must agree: today it
       shows "Signed in" for any live ID token, including SpacetimeAuth's anonymous login,
       so it needs the same `email_verified` test (found during M15.5)
+      Built in five commits (`d696797`, `896f526`, `0508515`, and the write gate). The
+      `anonymous` stage proves it live: what each caller shape reads, that `grade_quiz`
+      leaves no row, and a rejection of every writing reducer by four not-signed-in
+      shapes (an anonymous token, SpacetimeAuth's anonymous login, which is also a
+      worker's shape, an untrusted issuer, a wrong audience). Watched failing three ways.
+      There are no worker reducers yet (they arrive with M16.3 and M19.3), so "a worker
+      may call only its works' worker reducers" is here only as "a worker calls no writing
+      reducer". The hosted module is not yet published with any of this
 
 **Acceptance:** a browser with cleared storage signs back in as the same identity and sees its
 own private branches.
@@ -878,3 +889,12 @@ them.** The three v0.1 entries that used to live here became M9.
   `--anonymous`, or with a local-only identity, so the dev database is not owned by the web
   login. That is the same ownership trap the resolved M13.1 entry describes, so move the
   data dir aside when switching.
+- **Drop the retired `link_requests` table** (found by M15.3). SpacetimeDB refuses to drop
+  a table that holds rows (`Cannot remove table link_requests: table contains data`), and
+  the local database held leftover offers. Clear its rows first, by a one-off reducer or
+  the operator's `spacetime sql`, on every database, then delete the table definition.
+- **The hosted demo book is closed to anonymous visitors once M15.3 is published.** An
+  anonymous seed owns it, so nobody can turn on its anonymous access, and §H of the
+  testing runbook (a private window, no account) will find no book. Fixing it means a new
+  demo book made by a signed-in seed (`BOC_SEED_TOKEN`). The seed finds the old one by
+  title, so the old one must be renamed or removed first, and no reducer does either.

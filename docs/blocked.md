@@ -36,47 +36,17 @@ didn't work" is not an entry.
 
 ## Open
 
-### M15.3 — the write gate leaves M15.2's carry-over with nothing to carry, and no way to test it
-**Date:** 2026-11-20
-**Tried:** M15.3 is landing in pieces, each with the gate green. Done:
-the client calls a token signed in only with `email_verified` (`d696797`); the book
-tables are private behind `visible_*` views, with an owner-set `anonymous_access`
-setting (`896f526`); `grade_quiz` grades an anonymous reader's quiz and records nothing,
-and their progress lives in browser storage, labelled as losable (piece 4). What is left
-is the write gate itself: every writing reducer refuses a caller who is not signed in.
-**Blocker:** the gate makes M15.2's carry-over (`begin_link`, `complete_link`) carry only
-*legacy* rows, the ones an anonymous identity wrote before the gate existed. From the
-gate on, no anonymous identity can write a username, a book, progress or a quiz attempt.
-So `identity-link.spec.ts` can no longer set up its happy path, which is how it proves
-that every identity-keyed row moves. Its refusal tests still work. Taking out a passing
-happy-path test, or adding a seam that lets anonymous callers write, is not mine to
-choose.
-**Options:**
-1. **Keep the carry-over for legacy rows, and drop its happy-path test** (the refusals
-   stay). `begin_link` is then the one writing reducer an anonymous caller may call. It
-   writes only a private offer, and only for an identity that already holds rows. The
-   move itself was verified live on 2026-11-20 and its code does not change. The cost
-   is that the code that moves real data is no longer exercised by the gate.
-2. **Retire the carry-over.** Delete `begin_link`, `complete_link`, `link_requests`,
-   the client's carry-over call and the `identity-link` happy path. Any anonymous rows
-   already on Maincloud stay with their anonymous identity. Signed-in readers can read
-   them, and nobody can edit them. Recommended **if** Maincloud holds no anonymous
-   books or progress you want kept. Only you can check that, with
-   `spacetime sql` as the database owner.
-3. **Keep it tested with a legacy fixture.** The stage publishes the last pre-gate
-   module to a scratch database, writes anonymous rows with it, publishes the current
-   module over it, then carries the rows over. That is the real production path, but it
-   is new machinery: an old wasm built from a pinned commit, and a second database.
-   That is roughly a task of its own.
-**Needs:** which option. With 1 or 2 the gate lands in one more commit: the rejection test
-per reducer, the smoke test's author signing in through the mock issuer, and the author
-screen asking an anonymous visitor to sign in. One more thing to know either way: the
-hosted demo book is owned by the old anonymous seed identity, so after the next publish
-anonymous visitors will not see it, and nothing can open it to them: only its owner may
-set `anonymous_access`, and a signed-in seed (`BOC_SEED_TOKEN`) is not its owner. Signed-in
-readers still see it. Replacing it means a new demo book, which is not part of M15.3.
+_Nothing is blocked._
 
 ## Resolved
+
+### M15.3 — the write gate leaves M15.2's carry-over with nothing to carry, and no way to test it (opened 2026-11-20)
+**Resolved:** 2026-11-20, by the human choosing option 2: retire the carry-over. `begin_link`,
+`complete_link`, the client's carry-over call and the `identity-link` stage are gone, and
+the `anonymous` stage now runs real ID tokens through the sign-in rule instead. The
+`link_requests` table stays, empty of purpose, because SpacetimeDB will not drop a table
+that holds rows (parking lot). Anonymous rows already on Maincloud stay with their
+anonymous identities: their owners still see them, and nobody can change them.
 
 ### M14.2 — "the sign-in provider is a vendor and an account, and only you can pick and enable it" (opened 2026-11-19)
 **Resolved:** 2026-11-19, by the human: SpacetimeAuth, enabled on `book-of-chaos-83i7y`, with

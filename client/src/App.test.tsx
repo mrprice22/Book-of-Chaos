@@ -107,8 +107,21 @@ describe('App', () => {
   it('opens an author book URL directly, and refuses it — the row is not the caller’s', () => {
     connected();
     window.history.pushState({}, '', '/author/book/1');
-    render(<App />);
+    render(
+      <SessionContext.Provider
+        value={{ token: 'id', signedIn: true, signIn: vi.fn(), signOut: vi.fn() }}
+      >
+        <App />
+      </SessionContext.Provider>,
+    );
     expect(screen.getByText(/does not exist, or is not yours/i)).toBeInTheDocument();
+  });
+
+  it('asks an anonymous visitor at an author URL to sign in', () => {
+    connected();
+    window.history.pushState({}, '', '/author/book/1');
+    render(<App />);
+    expect(screen.getByText(/sign in to write books/i)).toBeInTheDocument();
   });
 
   describe('account', () => {

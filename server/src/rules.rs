@@ -74,79 +74,24 @@ pub fn can_claim_username(
 }
 
 // ---------------------------------------------------------------------------
-// Carrying an anonymous identity over to a signed-in one (M15.2)
+// Signing in (M15.3)
 // ---------------------------------------------------------------------------
 
-/// How long a carry-over offer stays good, in microseconds. The browser makes and
-/// takes it within seconds of the sign-in redirect returning; ten minutes covers a
-/// slow network without leaving offers lying around.
-pub const LINK_TTL_MICROS: i64 = 10 * 60 * 1_000_000;
+/// The one refusal every writing reducer gives a caller who is not signed in.
+pub const NOT_SIGNED_IN: &str = "Sign in to make changes.";
 
-/// Decides whether an identity may offer its rows to `target`.
-///
-/// - `caller_signed_in` — the offer comes from the *anonymous* identity. A signed-in
-///   identity is already durable; there is nothing to carry.
-/// - `caller_has_rows` — the identity holds something to carry: a username, a book,
-///   progress or a quiz attempt. Not a username alone: the reader has no screen that
-///   claims one, so a real anonymous reader's books and progress are what is at stake.
-/// - `target_is_caller` — offering yourself to yourself is a mistake, not a link.
-pub fn can_begin_link(
-    caller_signed_in: bool,
-    caller_has_rows: bool,
-    target_is_caller: bool,
-) -> Result<(), String> {
-    if caller_signed_in {
-        return Err("You are already signed in, so there is nothing to carry over.".to_string());
+/// The first check in every writing reducer: a caller who is not signed in, by
+/// `signin::is_signed_in`, writes nothing (docs/v0.3-scope.md, the second
+/// 2026-11-19 amendment). That covers SpacetimeDB's anonymous tokens, a token from an
+/// issuer nobody chose, SpacetimeAuth's anonymous login, and a worker's token (0005).
+/// One message for all of them, like `require_owner`, so which check tripped is not
+/// told to the caller.
+pub fn require_signed_in(signed_in: bool) -> Result<(), String> {
+    if signed_in {
+        Ok(())
+    } else {
+        Err(NOT_SIGNED_IN.to_string())
     }
-    if !caller_has_rows {
-        return Err("This browser has nothing to carry over.".to_string());
-    }
-    if target_is_caller {
-        return Err(
-            "Nothing can be carried over to the identity that already holds it.".to_string(),
-        );
-    }
-    Ok(())
-}
-
-/// What `complete_link` knows about the offer it was pointed at.
-pub struct LinkFacts {
-    /// Microseconds since the offer was made.
-    pub age_micros: i64,
-    /// The offering identity still holds something to carry.
-    pub source_has_rows: bool,
-}
-
-/// Decides whether a signed-in identity may take the rows it was offered.
-///
-/// - `caller_signed_in` — by `signin::is_signed_in`. An anonymous caller, or one
-///   signed in with an issuer nobody chose, would otherwise take a username.
-/// - `caller_has_rows` — the caller already has a username, a book, progress or a
-///   quiz attempt of its own. Merging two histories is not something this does.
-/// - `link` — the offer from the named identity *to this caller*, if there is one.
-pub fn can_complete_link(
-    caller_signed_in: bool,
-    caller_has_rows: bool,
-    link: Option<LinkFacts>,
-) -> Result<(), String> {
-    if !caller_signed_in {
-        return Err("Sign in before carrying anything over.".to_string());
-    }
-    if caller_has_rows {
-        return Err(
-            "This account already has its own username, books or progress, so nothing was carried over to it."
-                .to_string(),
-        );
-    }
-    let link =
-        link.ok_or_else(|| "There is no carry-over waiting for this account.".to_string())?;
-    if !(0..=LINK_TTL_MICROS).contains(&link.age_micros) {
-        return Err("That carry-over has expired. Sign in again to retry.".to_string());
-    }
-    if !link.source_has_rows {
-        return Err("There is nothing left to carry over.".to_string());
-    }
-    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -196,9 +141,9 @@ pub fn require_owner(is_owner: bool) -> Result<(), String> {
 ///
 /// A signed-in reader reads every book, as in v0.2. A caller who is not signed in
 /// reads only the published books whose owner turned on anonymous access, plus any
-/// book it owns. That last clause is for an author whose books predate sign-in: they
-/// are anonymous until they sign in and carry them over (M15.2), and hiding their own
-/// books from them would look like losing them.
+/// book it owns. That last clause is for an author whose books predate M15.3, when an
+/// anonymous caller could still write: they can no longer change those books, but
+/// hiding them from their owner would look like losing them.
 pub fn can_read_book(
     signed_in: bool,
     is_owner: bool,
@@ -803,110 +748,14 @@ mod tests {
     }
     use crate::unlock::{BlockState, ChapterState};
 
-    // --- Carry-over (M15.2) ---------------------------------------------------
-
-    fn fresh_link() -> Option<LinkFacts> {
-        Some(LinkFacts {
-            age_micros: 5_000_000,
-            source_has_rows: true,
-        })
+    #[test]
+    fn a_signed_in_caller_passes_the_sign_in_check() {
+        assert!(require_signed_in(true).is_ok());
     }
 
     #[test]
-    fn an_anonymous_identity_with_rows_may_offer_them() {
-        assert!(can_begin_link(false, true, false).is_ok());
-    }
-
-    #[test]
-    fn a_signed_in_identity_has_nothing_to_offer() {
-        assert!(
-            can_begin_link(true, true, false)
-                .unwrap_err()
-                .contains("already signed in")
-        );
-    }
-
-    #[test]
-    fn an_identity_with_no_rows_has_nothing_to_offer() {
-        assert!(
-            can_begin_link(false, false, false)
-                .unwrap_err()
-                .contains("nothing to carry over")
-        );
-    }
-
-    #[test]
-    fn an_identity_cannot_offer_itself_to_itself() {
-        assert!(can_begin_link(false, true, true).is_err());
-    }
-
-    #[test]
-    fn a_signed_in_identity_with_nothing_of_its_own_takes_a_fresh_offer() {
-        assert!(can_complete_link(true, false, fresh_link()).is_ok());
-    }
-
-    #[test]
-    fn an_anonymous_caller_cannot_take_an_offer() {
-        // Authorization first: refused before the offer is even looked at.
-        assert!(
-            can_complete_link(false, false, fresh_link())
-                .unwrap_err()
-                .contains("Sign in")
-        );
-        assert!(
-            can_complete_link(false, false, None)
-                .unwrap_err()
-                .contains("Sign in")
-        );
-    }
-
-    #[test]
-    fn a_caller_with_rows_of_its_own_cannot_take_an_offer() {
-        assert!(
-            can_complete_link(true, true, fresh_link())
-                .unwrap_err()
-                .contains("already has")
-        );
-    }
-
-    #[test]
-    fn there_must_be_an_offer_to_this_caller() {
-        assert!(
-            can_complete_link(true, false, None)
-                .unwrap_err()
-                .contains("no carry-over")
-        );
-    }
-
-    #[test]
-    fn an_offer_expires_after_the_ttl() {
-        let at = |age_micros| {
-            can_complete_link(
-                true,
-                false,
-                Some(LinkFacts {
-                    age_micros,
-                    source_has_rows: true,
-                }),
-            )
-        };
-        assert!(at(LINK_TTL_MICROS).is_ok());
-        assert!(at(LINK_TTL_MICROS + 1).unwrap_err().contains("expired"));
-        // A clock that ran backwards is not a fresh offer.
-        assert!(at(-1).unwrap_err().contains("expired"));
-    }
-
-    #[test]
-    fn an_offer_with_nothing_left_behind_it_is_refused() {
-        let link = Some(LinkFacts {
-            age_micros: 0,
-            source_has_rows: false,
-        });
-        assert!(
-            can_complete_link(true, false, link)
-                .unwrap_err()
-                .contains("nothing left")
-        );
+    fn a_caller_who_is_not_signed_in_is_refused_with_one_message() {
+        assert_eq!(require_signed_in(false).unwrap_err(), NOT_SIGNED_IN);
     }
 
     #[test]

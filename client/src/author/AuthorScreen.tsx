@@ -3,10 +3,12 @@ import { t } from '../i18n';
 import { reducers, tables } from '../module_bindings';
 import { authorBookPath, HOME_PATH, navigate } from '../routing/route';
 import { BookForm } from './BookForm';
+import { useSession } from '../spacetime/session';
+import { SignInToWrite } from './SignInToWrite';
 import { useAction } from './useAction';
 
 /** The author's own books, and the form that makes another one. */
-export function AuthorScreen() {
+function AuthorScreenSigned() {
   const { identity } = useSpacetimeDB();
   const [books, booksReady] = useTable(tables.visibleBooks);
   const createBook = useReducer(reducers.createBook);
@@ -45,4 +47,10 @@ export function AuthorScreen() {
       )}
     </section>
   );
+}
+
+/** The author screen is for signed-in callers; anyone else is asked to sign in. */
+export function AuthorScreen() {
+  const { signedIn } = useSession();
+  return signedIn ? <AuthorScreenSigned /> : <SignInToWrite />;
 }

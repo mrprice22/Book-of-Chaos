@@ -25,6 +25,8 @@ export const enUS = {
   'nav.read': 'Read',
   'nav.author': 'Author',
   'author.title': 'Author',
+  'author.signInToWrite':
+    'Sign in to write books. Readers who are not signed in can read, but not write.',
   'author.yourBooks': 'Your books',
   'author.noBooks': 'You have not created a book yet.',
   'author.newBook': 'New book',

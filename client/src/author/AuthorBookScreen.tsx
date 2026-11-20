@@ -6,10 +6,12 @@ import { AnonymousAccess } from './AnonymousAccess';
 import { ChapterEditor } from './ChapterEditor';
 import { ChapterForm } from './ChapterForm';
 import { PublishPanel } from './PublishPanel';
+import { useSession } from '../spacetime/session';
+import { SignInToWrite } from './SignInToWrite';
 import { useAction } from './useAction';
 
 /** One book's chapters, with the forms that add to it. */
-export function AuthorBookScreen({ bookId }: { bookId: bigint }) {
+function AuthorBookScreenSigned({ bookId }: { bookId: bigint }) {
   const { identity } = useSpacetimeDB();
   const [books, booksReady] = useTable(tables.visibleBooks);
   const [chapters] = useTable(tables.visibleChapters);
@@ -107,4 +109,10 @@ export function AuthorBookScreen({ bookId }: { bookId: bigint }) {
       )}
     </section>
   );
+}
+
+/** The author screen is for signed-in callers; anyone else is asked to sign in. */
+export function AuthorBookScreen({ bookId }: { bookId: bigint }) {
+  const { signedIn } = useSession();
+  return signedIn ? <AuthorBookScreenSigned bookId={bookId} /> : <SignInToWrite />;
 }
