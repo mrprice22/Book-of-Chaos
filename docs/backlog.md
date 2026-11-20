@@ -540,14 +540,18 @@ M16–M19 below are amended where a record changed their shape.
 
 ## M15 — Durable sign-in
 
-- [ ] **M15.1** Sign-in per M14.2. The identity survives a cleared browser. The trusted
-      `(issuer, client_id)` pairs are operator-set data rather than a constant, so the e2e
-      stages can trust a mock issuer and the hosted module SpacetimeAuth (0002)
+- [~] **M15.1** Sign-in per M14.2. The identity survives a cleared browser. Client-side
+      only: the server already accepts the ID token, and nothing on it decides "signed in"
+      until M15.3
 - [ ] **M15.2** Existing `users` rows keep their username through the switch, by 0002's
       two-step link. It moves every identity-keyed row (`users`, `books.owner`,
       `reader_progress`, `quiz_attempts`), not only the username
 - [ ] **M15.3** Anonymous visitors can browse public works and cannot call any writing
-      reducer, with a rejection test per reducer. "Anonymous" includes SpacetimeAuth's own
+      reducer, with a rejection test per reducer. The module's trusted `(issuer, client_id)`
+      pairs are build-time configuration (`option_env!`, set by `deploy.sh` per target), so the
+      e2e build trusts a mock issuer and the hosted build only SpacetimeAuth. They cannot be
+      operator-set data, because a module cannot learn its database owner and the hosted
+      `init` already ran. "Anonymous" includes SpacetimeAuth's own
       anonymous login, which carries the trusted issuer and client ID (0002). Per the scope's
       second 2026-11-19 amendment, an anonymous reader is **read-only** and sees only the
       books whose owner enabled anonymous access. That is enforced by the server, through a

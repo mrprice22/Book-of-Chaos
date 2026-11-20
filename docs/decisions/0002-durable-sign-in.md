@@ -93,12 +93,14 @@ new identity already owns rows in any of them, and is tested on each.
 
 ## Consequences for later work
 
-- **M15.1.** The trusted issuer and client id cannot be a constant. The hosted module needs
-  SpacetimeAuth's, while the e2e stages need a mock issuer like this spike's, because no CI
-  run can click through a login page. The shape: `init` records `ctx.sender()`, the
-  publisher, as the operator in a private config table. An operator-only reducer sets the
-  trusted `(issuer, client_id)` pairs, and `deploy.sh` sets them per target. The client id is
-  public by design (it ships in the page), so committing it is fine.
+- **Trusted issuers are per build.** The trusted issuer and client id cannot be one constant.
+  The hosted module needs SpacetimeAuth's, while the e2e stages need a mock issuer like this
+  spike's, because no CI run can click through a login page. This record first proposed an
+  operator-only reducer, with `init` recording the publisher. That does not work. SpacetimeDB
+  2.8 gives a module no way to learn its database owner, and the hosted database's `init` ran
+  long before this existed. So the pairs are build-time configuration (`option_env!`), set by
+  `deploy.sh` per target (M15.3). The client id is public by design (it ships in the page), so
+  committing it is fine.
 - **M15.3.** "Anonymous" means *not signed in by the module's rule*, which is wider than
   "the token's issuer is `localhost`". A valid token from an untrusted issuer is anonymous
   too. The rejection test per writing reducer should use one of each.
@@ -124,6 +126,9 @@ one.
 
 ## Not measured
 
+- **`login_method` is probably the anonymous marker.** The discovery document lists a
+  `login_method` claim, and that is the likely way to tell an anonymous SpacetimeAuth login
+  from a magic link. It is confirmed only once a real token of each kind has been read.
 - **A real SpacetimeAuth token.** The project exists and its discovery document, client ID
   and redirect URIs were checked (blocked.md, resolved M14.2). But no one has signed in, so
   no real token has been through a module yet. That is M15.1's first live run.

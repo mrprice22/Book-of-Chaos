@@ -33,9 +33,17 @@ body {
   list-style: none;
 }
 
-.connection {
+.connection,
+.account {
   font-size: 0.875rem;
+}
+
+.connection {
   opacity: 0.75;
+}
+
+.account button {
+  margin-inline-start: 0.5rem;
 }
 
 .app {

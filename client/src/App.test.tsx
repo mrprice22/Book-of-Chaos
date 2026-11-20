@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Identity } from 'spacetimedb';
 import { App } from './App';
+import { SessionContext, type SessionControls } from './spacetime/session';
 
 // `spacetimedb/react` does not export its context, so the SDK's hook is the seam.
 // Everything below it — App, useConnectionStatus, t() — is the real thing.
@@ -108,5 +109,42 @@ describe('App', () => {
     window.history.pushState({}, '', '/author/book/1');
     render(<App />);
     expect(screen.getByText(/does not exist, or is not yours/i)).toBeInTheDocument();
+  });
+
+  describe('account', () => {
+    const withSession = (session: SessionControls) =>
+      render(
+        <SessionContext.Provider value={session}>
+          <App />
+        </SessionContext.Provider>,
+      );
+
+    it('offers sign-in to an anonymous reader, and starts it on click', async () => {
+      const signIn = vi.fn();
+      withSession({ token: 'anon', signedIn: false, signIn, signOut: vi.fn() });
+      expect(screen.getByText('Browsing anonymously')).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+      expect(signIn).toHaveBeenCalledOnce();
+    });
+
+    it('offers sign-out to a signed-in reader, and starts it on click', async () => {
+      const signOut = vi.fn();
+      withSession({ token: 'id', signedIn: true, signIn: vi.fn(), signOut });
+      expect(screen.getByText('Signed in')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Sign in' })).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+      expect(signOut).toHaveBeenCalledOnce();
+    });
+
+    it('offers sign-in even before the connection is up', () => {
+      // A reader stuck on "retrying" with an expired sign-in must still be able to act.
+      withSession({
+        token: undefined,
+        signedIn: false,
+        signIn: vi.fn(),
+        signOut: vi.fn(),
+      });
+      expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument();
+    });
   });
 });

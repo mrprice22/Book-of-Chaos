@@ -4,6 +4,7 @@ import { AuthorScreen } from './author/AuthorScreen';
 import { ChapterScreen } from './reader/ChapterScreen';
 import { Library } from './reader/Library';
 import { AUTHOR_PATH, HOME_PATH, navigate, useRoute, type Route } from './routing/route';
+import { useSession } from './spacetime/session';
 import { useConnectionStatus } from './spacetime/useConnectionStatus';
 
 function Screen({ route }: { route: Route }) {
@@ -49,6 +50,19 @@ function Nav({ route }: { route: Route }) {
   );
 }
 
+/** Sign in or out. Being signed in is a fact about the token, not a permission (CLAUDE.md). */
+function Account() {
+  const session = useSession();
+  return (
+    <p className="account" data-signed-in={session.signedIn}>
+      <span>{session.signedIn ? t('account.signedIn') : t('account.anonymous')}</span>{' '}
+      <button type="button" onClick={session.signedIn ? session.signOut : session.signIn}>
+        {session.signedIn ? t('account.signOut') : t('account.signIn')}
+      </button>
+    </p>
+  );
+}
+
 export function App() {
   const status = useConnectionStatus();
   const route = useRoute();
@@ -69,6 +83,7 @@ export function App() {
           </span>
         )}
       </p>
+      <Account />
       {/* Nothing below the connection banner can do anything useful without one. */}
       {status.kind === 'connected' && (
         <>
