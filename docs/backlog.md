@@ -613,7 +613,9 @@ M16–M19 below are amended where a record changed their shape.
       worker's shape, an untrusted issuer, a wrong audience). Watched failing three ways.
       There are no worker reducers yet (they arrive with M16.3 and M19.3), so "a worker
       may call only its works' worker reducers" is here only as "a worker calls no writing
-      reducer". The hosted module is not yet published with any of this
+      reducer". Published to Maincloud 2026-11-20 by the human (`deploy.sh remote`): the
+      migration applied in place, as it had locally (the column added, eight tables made
+      private, rows kept)
 
 **Acceptance:** a browser with cleared storage signs back in as the same identity and sees its
 own private branches.
