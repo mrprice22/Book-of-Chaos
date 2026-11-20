@@ -92,6 +92,12 @@ export const LinkRequest = __t.object("LinkRequest", {
 });
 export type LinkRequest = __Infer<typeof LinkRequest>;
 
+export const QuestionVerdict = __t.object("QuestionVerdict", {
+  questionId: __t.u64(),
+  isCorrect: __t.bool(),
+});
+export type QuestionVerdict = __Infer<typeof QuestionVerdict>;
+
 export const QuizAnswerInput = __t.object("QuizAnswerInput", {
   questionId: __t.u64(),
   selectedOptionIds: __t.array(__t.u64()),
@@ -158,6 +164,15 @@ export const QuizQuestionInput = __t.object("QuizQuestionInput", {
   },
 });
 export type QuizQuestionInput = __Infer<typeof QuizQuestionInput>;
+
+export const QuizVerdict = __t.object("QuizVerdict", {
+  scorePercent: __t.u32(),
+  passed: __t.bool(),
+  get results() {
+    return __t.array(QuestionVerdict);
+  },
+});
+export type QuizVerdict = __Infer<typeof QuizVerdict>;
 
 export const ReaderProgress = __t.object("ReaderProgress", {
   progressId: __t.u64(),

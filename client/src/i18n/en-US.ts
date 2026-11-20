@@ -13,6 +13,8 @@ export const enUS = {
   'account.signIn': 'Sign in',
   'account.signOut': 'Sign out',
   'account.signedIn': 'Signed in',
+  'progress.localOnly':
+    'You are not signed in, so your progress is kept in this browser only and can be lost. Sign in to keep it.',
   'account.anonymous': 'Browsing anonymously',
   'book.loading': 'Loading the library…',
   'book.none': 'No book has been published yet.',

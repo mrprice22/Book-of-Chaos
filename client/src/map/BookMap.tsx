@@ -1,6 +1,8 @@
 import { useSpacetimeDB, useTable } from 'spacetimedb/react';
 import { tables } from '../module_bindings';
 import { t } from '../i18n';
+import { useSession } from '../spacetime/session';
+import { completedBlockIds, useLocalProgress } from '../reader/localProgress';
 import { buildGraph, chapterState } from '../reader/chapterState';
 import { KnowledgeMap } from './KnowledgeMap';
 import { toMermaid, type NodeInput } from './mermaidSource';
@@ -17,6 +19,8 @@ export function BookMap({ bookId }: { bookId: bigint }) {
   const [blocks, blocksReady] = useTable(tables.visibleBlocks);
   const [deps, depsReady] = useTable(tables.visibleChapterDeps);
   const [progress] = useTable(tables.readerProgress);
+  const { signedIn } = useSession();
+  const local = useLocalProgress();
 
   if (!chaptersReady || !blocksReady || !depsReady) {
     return <p className="map-status">{t('map.rendering')}</p>;
@@ -27,11 +31,7 @@ export function BookMap({ bookId }: { bookId: bigint }) {
     return <p className="map-status">{t('map.empty')}</p>;
   }
 
-  const completed = new Set(
-    progress
-      .filter((p) => identity && p.identity.isEqual(identity))
-      .map((p) => p.blockId),
-  );
+  const completed = completedBlockIds(progress, identity, signedIn ? undefined : local);
   const graph = buildGraph(bookId, chapters, blocks, deps);
 
   const nodes: NodeInput[] = inBook.map((c) => ({

@@ -221,3 +221,125 @@ test('narrowing the view to a closed book still returns nothing', async () => {
   });
   expect([...anon.conn.db.visibleBooks.iter()]).toEqual([]);
 });
+
+// ---------------------------------------------------------------------------
+// Quizzes: graded by `grade_quiz`, which returns the verdict and records nothing
+// ---------------------------------------------------------------------------
+
+const RIGHT = 'Right';
+
+/** A one-question quiz in `bookId`'s chapter. Returns the block and its option ids. */
+async function addQuiz(bookId: bigint) {
+  const r = author.conn.reducers;
+  const db = author.conn.db;
+  const chapter = await waitFor(
+    () => [...db.visibleChapters.iter()].find((c) => c.bookId === bookId),
+    'the chapter',
+  );
+  const title = `Quiz ${uniqueSub('quiz')}`;
+  await r.createBlock({
+    chapterId: chapter.chapterId,
+    title,
+    blockType: { tag: 'Quiz' },
+    bodyHtml: '<p>One question.</p>',
+    url: undefined,
+    isOptional: false,
+  });
+  const block = await waitFor(
+    () => [...db.visibleBlocks.iter()].find((b) => b.title === title),
+    'the quiz block',
+  );
+  await r.setQuiz({
+    blockId: block.blockId,
+    passThreshold: 100,
+    questions: [
+      {
+        promptHtml: 'Which one?',
+        options: [
+          { textHtml: RIGHT, isCorrect: true },
+          { textHtml: 'Wrong', isCorrect: false },
+        ],
+      },
+    ],
+  });
+  const question = await waitFor(
+    () => [...db.visibleQuizQuestions.iter()].find((q) => q.blockId === block.blockId),
+    'the question',
+  );
+  const options = await waitFor(() => {
+    const found = [...db.visibleQuizOptions.iter()].filter((o) => o.questionId === question.questionId);
+    return found.length === 2 ? found : undefined;
+  }, 'the options');
+  const option = (text: string) => {
+    const found = options.find((o) => o.textHtml === text);
+    if (!found) throw new Error(`no option ${text}`);
+    return found.optionId;
+  };
+  return {
+    blockId: block.blockId,
+    answer: (text: string) => [{ questionId: question.questionId, selectedOptionIds: [option(text)] }],
+  };
+}
+
+/** The rows `identity` holds in the tables a graded attempt writes, as `observer` sees them. */
+function writtenBy(observer: Caller, identity: Caller['identity']) {
+  const id = identity.toHexString();
+  const db = observer.conn.db;
+  return {
+    attempts: [...db.quizAttempts.iter()].filter((a) => a.identity.toHexString() === id).length,
+    progress: [...db.readerProgress.iter()].filter((p) => p.identity.toHexString() === id).length,
+  };
+}
+
+test('an anonymous reader is graded by grade_quiz, and the attempt leaves no row behind', async () => {
+  const quiz = await addQuiz(books.open);
+  const observer = await subscribed(connectSignedIn(issuer));
+
+  // The control: a signed-in reader's passing submission does write, and the
+  // observer sees it. So "no rows" below is a settled answer, not an unwatched table.
+  const reader = await connectSignedIn(issuer);
+  opened.push(reader);
+  await reader.conn.reducers.submitQuiz({ blockId: quiz.blockId, answers: quiz.answer(RIGHT) });
+  await waitFor(
+    () => (writtenBy(observer, reader.identity).progress === 1 ? true : undefined),
+    'the signed-in reader’s rows',
+  );
+  expect(writtenBy(observer, reader.identity)).toEqual({ attempts: 1, progress: 1 });
+
+  for (const anon of [await anonymousToken(), await anonymousLogin()]) {
+    const failed = await anon.conn.procedures.gradeQuiz({
+      blockId: quiz.blockId,
+      answers: quiz.answer('Wrong'),
+    });
+    // The wire shape of a Rust `Result` (see `readGradeResult` in src/reader/localProgress.ts).
+    expect(failed).toMatchObject({ ok: { scorePercent: 0, passed: false } });
+    const passed = await anon.conn.procedures.gradeQuiz({
+      blockId: quiz.blockId,
+      answers: quiz.answer(RIGHT),
+    });
+    expect(passed).toMatchObject({ ok: { scorePercent: 100, passed: true } });
+
+    // A write made by the procedure would reach the observer as fast as the control's
+    // did, so a short wait after the call settles it.
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    expect(writtenBy(observer, anon.identity)).toEqual({ attempts: 0, progress: 0 });
+  }
+});
+
+test('grade_quiz refuses a quiz in a book closed to anonymous readers', async () => {
+  const quiz = await addQuiz(books.closed);
+  const anon = await connectAs();
+  opened.push(anon);
+  const verdict = await anon.conn.procedures.gradeQuiz({
+    blockId: quiz.blockId,
+    answers: quiz.answer(RIGHT),
+  });
+  expect(verdict).toEqual({ err: 'That block no longer exists.' });
+
+  // The control: the same call by a signed-in reader is graded.
+  const reader = await connectSignedIn(issuer);
+  opened.push(reader);
+  expect(
+    await reader.conn.procedures.gradeQuiz({ blockId: quiz.blockId, answers: quiz.answer(RIGHT) }),
+  ).toMatchObject({ ok: { passed: true } });
+});

@@ -1328,6 +1328,49 @@ pub fn submit_quiz(
     // quiz in a chapter the reader has not reached.
     rules::require_unlocked_block(unlock::block_state(&graph, &progress, block_id))?;
 
+    let grade = grade_answers(ctx, block_id, answers)?;
+
+    let attempt = ctx.db.quiz_attempts().insert(QuizAttempt {
+        attempt_id: 0, // assigned by #[auto_inc]
+        identity: reader,
+        block_id,
+        score_percent: grade.score_percent,
+        passed: grade.passed,
+        submitted_at: ctx.timestamp,
+    });
+    // One row per question, so the reader can be shown *which* ones were wrong
+    // rather than only how many. `insert` returns the row with its assigned id,
+    // which is the only way to tie these to the attempt above.
+    for result in &grade.results {
+        ctx.db.quiz_attempt_results().insert(QuizAttemptResult {
+            result_id: 0, // assigned by #[auto_inc]
+            attempt_id: attempt.attempt_id,
+            question_id: result.question_id,
+            is_correct: result.is_correct,
+        });
+    }
+
+    if grade.passed && !progress.has_completed(block_id) {
+        ctx.db.reader_progress().insert(ReaderProgress {
+            progress_id: 0, // assigned by #[auto_inc]
+            identity: reader,
+            block_id,
+            completed_at: ctx.timestamp,
+        });
+    }
+    Ok(())
+}
+
+/// Grade `answers` against the private answer key for `block_id`. Reads, writes nothing.
+///
+/// Shared by `submit_quiz`, which records the grade, and `grade_quiz`, which only
+/// returns it. A `Quiz` block with no quiz configured is refused rather than treated
+/// as an empty pass: the safe reading of "no questions" is "not ready".
+fn grade_answers(
+    ctx: &ReducerContext,
+    block_id: u64,
+    answers: Vec<QuizAnswerInput>,
+) -> Result<rules::Grade, String> {
     let config = ctx
         .db
         .quiz_config()
@@ -1373,37 +1416,80 @@ pub fn submit_quiz(
         })
         .collect();
 
-    let grade = rules::grade_quiz(config.pass_threshold, &key, &submitted)?;
+    rules::grade_quiz(config.pass_threshold, &key, &submitted)
+}
 
-    let attempt = ctx.db.quiz_attempts().insert(QuizAttempt {
-        attempt_id: 0, // assigned by #[auto_inc]
-        identity: reader,
-        block_id,
-        score_percent: grade.score_percent,
-        passed: grade.passed,
-        submitted_at: ctx.timestamp,
-    });
-    // One row per question, so the reader can be shown *which* ones were wrong
-    // rather than only how many. `insert` returns the row with its assigned id,
-    // which is the only way to tie these to the attempt above.
-    for result in &grade.results {
-        ctx.db.quiz_attempt_results().insert(QuizAttemptResult {
-            result_id: 0, // assigned by #[auto_inc]
-            attempt_id: attempt.attempt_id,
-            question_id: result.question_id,
-            is_correct: result.is_correct,
-        });
-    }
+/// One question's verdict, as `grade_quiz` returns it.
+#[derive(SpacetimeType, Clone, Debug)]
+pub struct QuestionVerdict {
+    pub question_id: u64,
+    pub is_correct: bool,
+}
 
-    if grade.passed && !progress.has_completed(block_id) {
-        ctx.db.reader_progress().insert(ReaderProgress {
-            progress_id: 0, // assigned by #[auto_inc]
-            identity: reader,
-            block_id,
-            completed_at: ctx.timestamp,
-        });
-    }
-    Ok(())
+/// What `grade_quiz` returns: the same verdict `submit_quiz` records, and never the
+/// selections or the key.
+#[derive(SpacetimeType, Clone, Debug)]
+pub struct QuizVerdict {
+    pub score_percent: u32,
+    pub passed: bool,
+    pub results: Vec<QuestionVerdict>,
+}
+
+/// Grade a quiz for a reader who is not signed in, and save nothing (M15.3).
+///
+/// The answer key stays on the server, so grading has to happen here. But a caller
+/// who is not signed in writes no row, so this is a procedure that *returns* the
+/// verdict instead of a reducer that records it: no `quiz_attempts`, no
+/// `quiz_attempt_results`, no `reader_progress`. The reader's browser keeps the result,
+/// and it unlocks nothing anyone else sees.
+///
+/// It grades only quizzes in books the caller may read, by the views' rule, so a book
+/// closed to anonymous readers is not a quiz they can probe. A block in such a book
+/// is "not found", the same answer as a block that does not exist.
+///
+/// It does not check the chapter and block gates `submit_quiz` checks. Those are
+/// computed from progress, and an anonymous reader's progress is in their own browser,
+/// where the server cannot read it. Nothing is recorded, so passing a quiz the reader
+/// has not reached gains them nothing the open book did not already show them.
+#[spacetimedb::procedure]
+pub fn grade_quiz(
+    ctx: &mut spacetimedb::ProcedureContext,
+    block_id: u64,
+    answers: Vec<QuizAnswerInput>,
+) -> Result<QuizVerdict, String> {
+    let caller = ctx.sender();
+    ctx.try_with_tx(|tx| {
+        let not_found = || "That block no longer exists.".to_string();
+        let block = find_block(tx, block_id)?;
+        if block.block_type != BlockType::Quiz {
+            return Err("That block is not a quiz.".to_string());
+        }
+        let chapter = find_chapter(tx, block.chapter_id).map_err(|_| not_found())?;
+        let book = find_book(tx, chapter.book_id).map_err(|_| not_found())?;
+        let readable = rules::can_read_book(
+            tx.db.signed_in().identity().find(caller).is_some(),
+            book.owner == caller,
+            book.anonymous_access,
+            book.status == BookStatus::Published,
+        );
+        if !readable {
+            return Err(not_found());
+        }
+
+        let grade = grade_answers(tx, block_id, answers.clone())?;
+        Ok(QuizVerdict {
+            score_percent: grade.score_percent,
+            passed: grade.passed,
+            results: grade
+                .results
+                .iter()
+                .map(|r| QuestionVerdict {
+                    question_id: r.question_id,
+                    is_correct: r.is_correct,
+                })
+                .collect(),
+        })
+    })
 }
 
 /// Assemble the unlock engine's view of one book.

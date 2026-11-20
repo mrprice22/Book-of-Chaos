@@ -6,5 +6,8 @@
 import { type Infer as __Infer } from "spacetimedb";
 
 // Import all procedure arg schemas
+import * as GradeQuizProcedure from "../grade_quiz_procedure";
 
+export type GradeQuizArgs = __Infer<typeof GradeQuizProcedure.params>;
+export type GradeQuizResult = __Infer<typeof GradeQuizProcedure.returnType>;
 

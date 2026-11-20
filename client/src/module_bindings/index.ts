@@ -54,6 +54,7 @@ import UpdateBookReducer from "./update_book_reducer";
 import UpdateChapterReducer from "./update_chapter_reducer";
 
 // Import all procedure arg schemas
+import * as GradeQuizProcedure from "./grade_quiz_procedure";
 
 // Import all table schema definitions
 import QuizAttemptResultsRow from "./quiz_attempt_results_table";
@@ -221,6 +222,7 @@ const reducersSchema = __reducers(
 
 /** The schema information for all procedures in this module. This is defined the same way as the procedures would have been defined in the server. */
 const proceduresSchema = __procedures(
+  __procedureSchema("grade_quiz", GradeQuizProcedure.params, GradeQuizProcedure.returnType),
 );
 
 type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "tables"> & {

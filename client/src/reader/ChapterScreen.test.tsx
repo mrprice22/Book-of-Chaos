@@ -26,6 +26,12 @@ const sdk = vi.hoisted(() => ({
   // Keyed by accessor name, because the screen now calls two reducers and a
   // single shared spy could not tell "submitted a quiz" from "clicked complete".
   reducers: {} as Record<string, unknown>,
+  procedures: {} as Record<string, unknown>,
+  signedIn: true,
+}));
+
+vi.mock('../spacetime/session', () => ({
+  useSession: () => ({ signedIn: sdk.signedIn }),
 }));
 
 vi.mock('spacetimedb/react', async () => {
@@ -35,6 +41,8 @@ vi.mock('spacetimedb/react', async () => {
     useSpacetimeDB: () => ({ identity: sdk.identity }),
     useTable: (query: unknown) => [sdk.rows[accessorName(query)] ?? [], sdk.ready],
     useReducer: (reducer: { accessorName: string }) => sdk.reducers[reducer.accessorName],
+    useProcedure: (procedure: { accessorName: string }) =>
+      sdk.procedures[procedure.accessorName],
   };
 });
 
@@ -67,6 +75,9 @@ describe('ChapterScreen', () => {
   beforeEach(() => {
     sdk.ready = true;
     sdk.identity = READER;
+    sdk.signedIn = true;
+    window.localStorage.clear();
+    sdk.procedures = { gradeQuiz: vi.fn(() => Promise.resolve('unused')) };
     sdk.reducers = {
       completeBlock: vi.fn(() => Promise.resolve()),
       submitQuiz: vi.fn(() => Promise.resolve()),
@@ -232,6 +243,63 @@ describe('ChapterScreen', () => {
 
     expect(screen.getByText('Intro')).toBeInTheDocument();
     expect(screen.queryByText(/locked/i)).not.toBeInTheDocument();
+  });
+
+  it('keeps an anonymous reader’s completion in this browser and calls no reducer', async () => {
+    sdk.signedIn = false;
+    render(<ChapterScreen chapterId={10n} />);
+    expect(
+      screen.getByText(/kept in this browser only and can be lost/i),
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /mark as complete/i }));
+    expect(sdk.reducers.completeBlock).not.toHaveBeenCalled();
+    expect(await screen.findByText(/^Completed$/)).toBeInTheDocument();
+    expect(window.localStorage.getItem('boc.anonymous_progress.v1')).toContain('"100"');
+  });
+
+  it('says nothing about browser storage to a signed-in reader', () => {
+    render(<ChapterScreen chapterId={10n} />);
+    expect(screen.queryByText(/kept in this browser only/i)).not.toBeInTheDocument();
+  });
+
+  it('grades an anonymous reader’s quiz with grade_quiz and shows the returned verdict', async () => {
+    sdk.signedIn = false;
+    const gradeQuiz = vi.fn(() =>
+      Promise.resolve({
+        ok: {
+          scorePercent: 100,
+          passed: true,
+          results: [{ questionId: 200n, isCorrect: true }],
+        },
+      }),
+    );
+    sdk.procedures = { gradeQuiz };
+    quizRows();
+    render(<ChapterScreen chapterId={10n} />);
+    await userEvent.click(screen.getByRole('radio', { name: 'The server' }));
+    await userEvent.click(screen.getByRole('button', { name: /submit answers/i }));
+
+    expect(gradeQuiz).toHaveBeenCalledWith({
+      blockId: 101n,
+      answers: [{ questionId: 200n, selectedOptionIds: [300n] }],
+    });
+    expect(sdk.reducers.submitQuiz).not.toHaveBeenCalled();
+    expect(await screen.findByRole('status')).toHaveTextContent('100%');
+  });
+
+  it('shows a refusal grade_quiz returns instead of a verdict', async () => {
+    sdk.signedIn = false;
+    sdk.procedures = {
+      gradeQuiz: vi.fn(() =>
+        Promise.resolve({ err: 'This quiz has not been written yet.' }),
+      ),
+    };
+    quizRows();
+    render(<ChapterScreen chapterId={10n} />);
+    await userEvent.click(screen.getByRole('radio', { name: 'The server' }));
+    await userEvent.click(screen.getByRole('button', { name: /submit answers/i }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('not been written yet');
   });
 
   it('submits a quiz through submit_quiz, never through complete_block', async () => {
