@@ -884,7 +884,9 @@ them.** The three v0.1 entries that used to live here became M9.
   local `spacetime publish` therefore makes the *local* server fetch that issuer's public
   key, and when the fetch fails the publish fails too: `Pre-publish check failed with status
   401 Unauthorized: Error fetching public key for issuer https://auth.spacetimedb.com`.
-  It happened once on 2026-11-19, in `auth-reject` only, and was green on rerun. CI is not
+  It happened once on 2026-11-19, in `auth-reject` only, and was green on rerun. It recurred
+  on 2026-11-20, in `e2e-smoke` only, in the Stop hook's run after M15.3; the four other e2e
+  stages published fine in the same run. CI is not
   affected, because its CLI is anonymous. The fix, if it recurs: publish locally with
   `--anonymous`, or with a local-only identity, so the dev database is not owned by the web
   login. That is the same ownership trap the resolved M13.1 entry describes, so move the
