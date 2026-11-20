@@ -71,9 +71,11 @@ Bifurcation's blocks in one; the other tab's map changes on its own, without a r
 cannot be unpublished. Leave authoring to the local walkthrough, §6.
 
 **How this copy stays current.** The reader is *meant* to be rebuilt and redeployed by
-Cloudflare on every push to `main`. **As of 2026-11-19 that was not happening.** The
-Cloudflare dashboard showed no build since M13.3 (2026-08), and `b33e740` was pushed
-but never served. Until a push has been seen to go live again, check rather than assume.
+Cloudflare on every push to `main`. **From 2026-08 to 2026-11-19 it did not.** The
+Cloudflare dashboard showed no build since M13.3, and `b33e740` was pushed but never
+served. The human fixed the dashboard's build settings, and `b20849b` then went live
+about 2 minutes after its push (bundle `index-Ck6ARfrB.js` → `index-Hnzj6Zjr.js`). A
+trigger that broke silently once can do so again, so check rather than assume.
 The served bundle is named in `index.html`
 (`curl -s https://book-of-chaos.com/ | grep -o '/assets/index-[^"]*'`), and it should
 change after a push that touches `client/`. The module on Maincloud does not deploy on

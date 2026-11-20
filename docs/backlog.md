@@ -801,7 +801,9 @@ them.** The three v0.1 entries that used to live here became M9.
 - **Only half of the hosted demo deploys on push, and as of 2026-11-19 neither half
   did.** Cloudflare is meant to rebuild the reader on every push to `main`, but its
   dashboard showed no build since M13.3 (2026-08). The first push that changed `client/`
-  since then (`b33e740`, sign-in) never went live, which is how this was found. The module
+  since then (`b33e740`, sign-in) never went live, which is how this was found. The human
+  fixed the dashboard settings, and the next push (`b20849b`) was live in about 2 minutes.
+  The reader half deploys on push again. The module
   on Maincloud changes only when someone runs `./scripts/deploy.sh remote`. Harmless while `server/` is still — nothing in it has
   changed since M13.2 published it — but the first v0.3 commit that adds a table or
   changes a reducer will put a reader live that expects a schema the hosted database
