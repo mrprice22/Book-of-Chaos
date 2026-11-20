@@ -4,14 +4,7 @@ import { SpacetimeDBProvider } from 'spacetimedb/react';
 import { App } from './App';
 import { carryOver, shouldCarryOver } from './spacetime/carryOver';
 import { buildConnection } from './spacetime/connect';
-import {
-  SessionContext,
-  signIn,
-  signOut,
-  startSession,
-  type SignInChoice,
-} from './spacetime/session';
-import { loadLastAccount } from './spacetime/lastAccount';
+import { SessionContext, signIn, signOut, startSession } from './spacetime/session';
 import { loadToken } from './spacetime/token';
 import './index.css';
 
@@ -32,11 +25,9 @@ void startSession().then(async ({ session, keeper, justSignedIn }) => {
   if (shouldCarryOver(justSignedIn, session.signedIn, anonymousToken) && session.token) {
     await carryOver(anonymousToken, session.token);
   }
-  const lastAccount = loadLastAccount();
   const controls = {
     ...session,
-    lastAccount,
-    signIn: (choice: SignInChoice) => void signIn(choice),
+    signIn: () => void signIn(),
     signOut: () => void signOut(),
   };
   createRoot(root).render(

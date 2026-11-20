@@ -11,8 +11,6 @@ export const enUS = {
   'connection.reconnecting': 'Connection lost — retrying…',
   'connection.connectedAs': 'Connected as',
   'account.signIn': 'Sign in',
-  'account.continueAs': 'Continue as {email}',
-  'account.useAnother': 'Use another account',
   'account.signOut': 'Sign out',
   'account.signedIn': 'Signed in',
   'account.anonymous': 'Browsing anonymously',

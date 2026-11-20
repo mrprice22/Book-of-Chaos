@@ -50,42 +50,15 @@ function Nav({ route }: { route: Route }) {
   );
 }
 
-/**
- * Sign in or out. Being signed in is a fact about the token, not a permission (CLAUDE.md).
- *
- * Signed out, with an account this browser remembers, the reader chooses: continue
- * as that account, or use another one (M15.5). With nothing remembered, there is
- * nothing to choose between, so there is one "Sign in".
- */
+/** Sign in or out. Being signed in is a fact about the token, not a permission (CLAUDE.md). */
 function Account() {
   const session = useSession();
-  if (session.signedIn) {
-    return (
-      <p className="account" data-signed-in={true}>
-        <span>{t('account.signedIn')}</span>{' '}
-        <button type="button" onClick={session.signOut}>
-          {t('account.signOut')}
-        </button>
-      </p>
-    );
-  }
   return (
-    <p className="account" data-signed-in={false}>
-      <span>{t('account.anonymous')}</span>{' '}
-      {session.lastAccount ? (
-        <>
-          <button type="button" onClick={() => session.signIn('continue')}>
-            {t('account.continueAs', { email: session.lastAccount })}
-          </button>{' '}
-          <button type="button" onClick={() => session.signIn('another')}>
-            {t('account.useAnother')}
-          </button>
-        </>
-      ) : (
-        <button type="button" onClick={() => session.signIn('continue')}>
-          {t('account.signIn')}
-        </button>
-      )}
+    <p className="account" data-signed-in={session.signedIn}>
+      <span>{session.signedIn ? t('account.signedIn') : t('account.anonymous')}</span>{' '}
+      <button type="button" onClick={session.signedIn ? session.signOut : session.signIn}>
+        {session.signedIn ? t('account.signOut') : t('account.signIn')}
+      </button>
     </p>
   );
 }

@@ -13,7 +13,6 @@ import { createContext, useContext } from 'react';
 import { UserManager, WebStorageStateStore } from 'oidc-client-ts';
 import { SPACETIMEAUTH_AUTHORITY, SPACETIMEAUTH_CLIENT_ID } from './config';
 import { loadToken } from './token';
-import { rememberedEmail, saveLastAccount } from './lastAccount';
 import {
   createSignInKeeper,
   isLive,
@@ -126,11 +125,7 @@ export async function startSession(): Promise<StartedSession> {
         window.history.replaceState(null, '', window.location.pathname);
       }
     }
-    const user = await userManager().getUser();
-    signIn = user;
-    // Kept for "Continue as" once this reader signs out (M15.5).
-    const email = user ? rememberedEmail(user.profile) : undefined;
-    if (email) saveLastAccount(email);
+    signIn = await userManager().getUser();
     if (signIn && !isLive(signIn, deps.now() / 1000)) {
       signIn = await renewSignIn(deps);
     }
@@ -144,31 +139,9 @@ export async function startSession(): Promise<StartedSession> {
   return { session, keeper, justSignedIn };
 }
 
-/**
- * How a signed-out reader asked to sign in (M15.5). `continue` reuses the provider's
- * own session if it still has one, so it can be one click. `another` makes the
- * provider ask for an email whatever it remembers.
- */
-export type SignInChoice = 'continue' | 'another';
-
-/**
- * Pure: the extra authorization-request parameters for a choice.
- *
- * `another` sends `prompt=login`, which SpacetimeAuth accepts. It refuses
- * `select_account` (both checked against its authorize endpoint, 2026-11-20), so
- * there is no provider-side account picker to hand this to.
- *
- * `continue` sends nothing extra, deliberately. The first build sent the remembered
- * email as `login_hint`, and the human saw SpacetimeAuth ask for an email anyway.
- * The same request without the hint had signed them straight back in.
- */
-export function signInRequest(choice: SignInChoice): { prompt?: 'login' } {
-  return choice === 'another' ? { prompt: 'login' } : {};
-}
-
-export function signIn(choice: SignInChoice): Promise<void> {
+export function signIn(): Promise<void> {
   const here = window.location.pathname + window.location.search;
-  return userManager().signinRedirect({ state: here, ...signInRequest(choice) });
+  return userManager().signinRedirect({ state: here });
 }
 
 /**
@@ -186,9 +159,7 @@ export async function signOut(): Promise<void> {
 }
 
 export interface SessionControls extends Session {
-  /** The email this browser last signed in with, for "Continue as" (M15.5). */
-  readonly lastAccount: string | undefined;
-  readonly signIn: (choice: SignInChoice) => void;
+  readonly signIn: () => void;
   readonly signOut: () => void;
 }
 
@@ -197,7 +168,6 @@ const noop = () => {};
 export const SessionContext = createContext<SessionControls>({
   token: undefined,
   signedIn: false,
-  lastAccount: undefined,
   signIn: noop,
   signOut: noop,
 });

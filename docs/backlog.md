@@ -573,15 +573,14 @@ M16–M19 below are amended where a record changed their shape.
       readers. Fixed to carry any identity-keyed row (`2c73d8a`) and republished. Verified
       2026-11-20 by the human: a book created anonymously in a private window was still in
       the author list after signing in with a new email
-- [~] **M15.5** Choose an account when signing in (asked for by the human, 2026-11-20).
-      After signing out, "Sign in" logged straight back in, because SpacetimeAuth keeps its own
-      session. Signed out with a remembered account, the reader offers "Continue as <email>"
-      (the provider's session, with nothing added: a `login_hint` made SpacetimeAuth ask for
-      an email, found in the human's check) and "Use another account" (`prompt=login`,
-      which forces the email page). SpacetimeAuth refuses `prompt=select_account`, checked
-      against its authorize endpoint. The email is remembered only in this browser, and only
-      from a verified sign-in. Unit tests, plus a human check that "Use another account" asks
-      for an email
+- [x] **M15.5** Choose an account when signing in (asked for by the human, 2026-11-20).
+      **Dropped at the human's call; reverted to one "Sign in".** Built as "Continue as
+      <email>" plus "Use another account" (`prompt=login`), in `f909431` and `644c42f`. The
+      human's checks: sign-out does end SpacetimeAuth's session, so "Continue as" always
+      reached the email page, with or without `login_hint`, and nothing can prefill that
+      page. SpacetimeAuth's `/login.js` never reads the hint, and it refuses
+      `prompt=select_account`. With no one-click path, the second button promised what it
+      could not do. The one earlier sign-in that skipped the email page was not seen again
 - [ ] **M15.3** Anonymous visitors can browse public works and cannot call any writing
       reducer, with a rejection test per reducer. The module's trusted `(issuer, client_id)`
       pairs are build-time configuration (`option_env!`, set by `deploy.sh` per target), so the

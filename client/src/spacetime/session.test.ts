@@ -1,5 +1,5 @@
 import { jwt } from './jwt.fixture';
-import { chooseSession, isSignInCallback, returnPath, signInRequest } from './session';
+import { chooseSession, isSignInCallback, returnPath } from './session';
 
 const NOW_S = 1_800_000_000;
 
@@ -86,16 +86,5 @@ describe('returnPath', () => {
     expect(returnPath('https://evil.example/')).toBe('/');
     expect(returnPath(undefined)).toBe('/');
     expect(returnPath(42)).toBe('/');
-  });
-});
-
-describe('signInRequest', () => {
-  it('makes the provider ask for an email when the reader wants another account', () => {
-    expect(signInRequest('another')).toEqual({ prompt: 'login' });
-  });
-
-  it('adds nothing when continuing, so the provider can reuse its own session', () => {
-    // A login_hint here made SpacetimeAuth ask for an email anyway (human check, M15.5).
-    expect(signInRequest('continue')).toEqual({});
   });
 });
