@@ -600,7 +600,9 @@ M16–M19 below are amended where a record changed their shape.
       Their progress lives only in browser storage, labelled in the UI as losable, and a test
       proves an anonymous attempt leaves no row behind. A worker's token is anonymous by this
       rule too (0005). It may call only the worker reducers of works that authorized it, and
-      a test shows it can call no other writing reducer
+      a test shows it can call no other writing reducer. The client must agree: today it
+      shows "Signed in" for any live ID token, including SpacetimeAuth's anonymous login,
+      so it needs the same `email_verified` test (found during M15.5)
 
 **Acceptance:** a browser with cleared storage signs back in as the same identity and sees its
 own private branches.
