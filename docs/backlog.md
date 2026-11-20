@@ -480,8 +480,11 @@ inventing infrastructure.
       Still required: `docs/testing-runbook.md` gains a section a human can follow
       **without cloning the repo** — §H. Verified 2026-11-19: the six reader paths of
       `client/e2e/smoke.spec.ts` pass against `https://book-of-chaos.com`, including
-      fail-the-quiz, pass-it, watch-Attractors-unlock. The reader deploys on push; the
-      module does not (see the parking lot)
+      fail-the-quiz, pass-it, watch-Attractors-unlock. The reader was *believed* to deploy
+      on push. **Corrected 2026-11-19:** Cloudflare had not built since M13.3, so the
+      2026-11-19 verification ran against the August build, which happened to match
+      because `client/` had not changed. The module does not deploy on push either (see
+      the parking lot)
 
 **Acceptance:** someone who has never cloned this repository can open a link, read the
 demo book, fail a quiz, pass it, and watch a node unlock.
@@ -795,9 +798,11 @@ them.** The three v0.1 entries that used to live here became M9.
   only when a needed view provably cannot be expressed as a manifest, and first ask whether
   one new generic block would express it instead.
 
-- **Only half of the hosted demo deploys on push.** Cloudflare rebuilds the reader on
-  every push to `main`; the module on Maincloud changes only when someone runs
-  `./scripts/deploy.sh remote`. Harmless while `server/` is still — nothing in it has
+- **Only half of the hosted demo deploys on push, and as of 2026-11-19 neither half
+  did.** Cloudflare is meant to rebuild the reader on every push to `main`, but its
+  dashboard showed no build since M13.3 (2026-08). The first push that changed `client/`
+  since then (`b33e740`, sign-in) never went live, which is how this was found. The module
+  on Maincloud changes only when someone runs `./scripts/deploy.sh remote`. Harmless while `server/` is still — nothing in it has
   changed since M13.2 published it — but the first v0.3 commit that adds a table or
   changes a reducer will put a reader live that expects a schema the hosted database
   does not have, and the symptom will be a broken page rather than a failed job.
