@@ -570,7 +570,9 @@ M16–M19 below are amended where a record changed their shape.
       a mock issuer and was watched failing on two planted holes. Published to Maincloud
       2026-11-20. The human's live check then found that the reader has no screen that
       claims a username, so the first build (which needed one) carried nothing for real
-      readers. Fixed to carry any identity-keyed row
+      readers. Fixed to carry any identity-keyed row (`2c73d8a`) and republished. Verified
+      2026-11-20 by the human: a book created anonymously in a private window was still in
+      the author list after signing in with a new email
 - [ ] **M15.3** Anonymous visitors can browse public works and cannot call any writing
       reducer, with a rejection test per reducer. The module's trusted `(issuer, client_id)`
       pairs are build-time configuration (`option_env!`, set by `deploy.sh` per target), so the
